@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Money Game</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>💰 Money Game</h1>
+      <p class="subtitle">Spend less, earn more points.</p>
+    </header>
+
+    <main class="card">
+      <section class="stats">
+        <div class="stat">
+          <span class="label">Day</span>
+          <span id="day" class="value">1</span>
+        </div>
+        <div class="stat">
+          <span class="label">Score</span>
+          <span id="score" class="value">0</span>
+        </div>
+        <div class="stat">
+          <span class="label">Lives</span>
+          <span id="lives" class="value">3</span>
+        </div>
+        <div class="stat">
+          <span class="label">Streak</span>
+          <span id="streak" class="value">0</span>
+        </div>
+      </section>
+
+      <section class="progress">
+        <div class="progress-row">
+          <span class="progress-label">Level progress</span>
+          <div class="progress-bar"><div id="levelBar" class="bar-fill" style="width:0%"></div></div>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label">Lives</span>
+          <div class="progress-bar danger"><div id="livesBar" class="bar-fill" style="width:100%"></div></div>
+        </div>
+      </section>
+
+      <section class="budget">
+        <label for="budgetInput">Daily budget (HKD)</label>
+        <div class="budget-row">
+          <input id="budgetInput" type="number" min="0" step="1" />
+          <button id="saveBudget" class="btn">Save</button>
+        </div>
+      </section>
+
+      <section class="entry">
+        <label for="spendInput">Spent today (HKD)</label>
+        <input id="spendInput" type="number" min="0" step="1" placeholder="e.g., 32" />
+        <button id="submitSpend" class="btn primary">Submit</button>
+        <p id="message" class="message"></p>
+      </section>
+
+      <section id="achievements" class="achievements">
+        <!-- Dynamic achievement badges -->
+      </section>
+
+      <section class="history">
+        <div class="history-header">
+          <h2>History</h2>
+          <div class="history-actions">
+            <button id="exportBtn" class="btn">Export</button>
+            <label class="import-label">
+              <input id="importFile" type="file" accept="application/json" />
+              <span class="btn">Import</span>
+            </label>
+            <button id="resetBtn" class="btn danger">Reset</button>
+          </div>
+        </div>
+        <ul id="historyList" class="list"></ul>
+      </section>
+    </main>
+
+    <div id="overlay" class="overlay hidden">
+      <div class="modal">
+        <h2>💀 Game Over</h2>
+        <p>Your lives reached zero. Want to try again?</p>
+        <button id="restartBtn" class="btn primary">Restart</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Made for mindful spending · Keep bills paid, level up your choices</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
