@@ -7,11 +7,26 @@ const defaultState = {
   lives: 3,
   day: 1,
   streak: 0,
-  levelXP: 0,          // 0–100 for level progress bar
-  history: []          // {date, spent, points, bonus, overspent}
+  levelXP: 0,
+  history: [],
+  wishlist: [],
+  availableStars: 0,
+  lastLifeReset: new Date().toISOString().slice(0, 7) // YYYY-MM format
 };
 
 let state = loadState();
+
+// Check if we need to reset lives for new month
+function checkMonthlyReset() {
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  if (state.lastLifeReset !== currentMonth) {
+    state.lives = 3;
+    state.lastLifeReset = currentMonth;
+    toast("✨ Lives refreshed for new month!");
+    saveState();
+    render();
+  }
+}
 
 // --- Elements ---
 const el = {
@@ -32,10 +47,17 @@ const el = {
   resetBtn: document.getElementById("resetBtn"),
   overlay: document.getElementById("overlay"),
   restartBtn: document.getElementById("restartBtn"),
-  achievements: document.getElementById("achievements")
+  achievements: document.getElementById("achievements"),
+  // New wishlist elements
+  wishlistItemInput: document.getElementById("wishlistItemInput"),
+  wishlistStarsInput: document.getElementById("wishlistStarsInput"),
+  addWishlistItem: document.getElementById("addWishlistItem"),
+  wishlistItems: document.getElementById("wishlistItems"),
+  starsAvailable: document.getElementById("starsAvailable")
 };
 
 // --- Init ---
+checkMonthlyReset(); // Check for monthly life reset
 render();
 el.budgetInput.value = state.budget;
 
@@ -60,6 +82,38 @@ el.submitSpend.addEventListener("click", () => {
   }
   processDay(spent);
   el.spendInput.value = "";
+});
+
+// Add wishlist item
+el.addWishlistItem.addEventListener("click", () => {
+  const name = el.wishlistItemInput.value.trim();
+  const starsNeeded = Number(el.wishlistStarsInput.value);
+  
+  if (!name) {
+    toast("⚠️ Enter an item name.");
+    return;
+  }
+  
+  if (!Number.isFinite(starsNeeded) || starsNeeded <= 0) {
+    toast("⚠️ Enter valid stars needed (minimum 1).");
+    return;
+  }
+  
+  const newItem = {
+    id: Date.now(),
+    name: name,
+    starsNeeded: Math.round(starsNeeded),
+    starsTransferred: 0,
+    completed: false
+  };
+  
+  state.wishlist.push(newItem);
+  saveState();
+  renderWishlist();
+  
+  el.wishlistItemInput.value = "";
+  el.wishlistStarsInput.value = "";
+  toast(`✅ Added "${name}" to wishlist (needs ${starsNeeded} stars)`);
 });
 
 // Export JSON
@@ -112,12 +166,18 @@ el.restartBtn.addEventListener("click", () => {
   state.levelXP = 0;
   state.day = 1;
   state.history = [];
+  state.wishlist = [];
+  state.availableStars = 0;
+  state.lastLifeReset = new Date().toISOString().slice(0, 7);
   saveState();
   render();
 });
 
 // --- Core logic ---
 function processDay(spent) {
+  // Check monthly reset
+  checkMonthlyReset();
+  
   let points = 0;
   let bonus = 0;
   let overspent = false;
@@ -127,8 +187,16 @@ function processDay(spent) {
     points = Math.round((state.budget - spent) * 2);
     state.score += points;
     state.streak += 1;
-    state.levelXP = Math.min(100, state.levelXP + Math.min(20, points / 2)); // grow level bar based on performance
-    message += `✅ Under budget! +${points} points. `;
+    state.levelXP = Math.min(100, state.levelXP + Math.min(20, points / 2));
+    
+    // Earn stars based on points (10 points = 1 star)
+    const starsEarned = Math.floor(points / 10);
+    if (starsEarned > 0) {
+      state.availableStars += starsEarned;
+      message += `✅ Under budget! +${points} points (+${starsEarned}⭐). `;
+    } else {
+      message += `✅ Under budget! +${points} points. `;
+    }
 
     // Random bonus (20% chance)
     if (Math.random() < 0.2) {
@@ -175,6 +243,93 @@ function processDay(spent) {
   }
 }
 
+function transferStars(itemId, amount) {
+  const item = state.wishlist.find(item => item.id === itemId);
+  if (!item || item.completed) return false;
+  
+  if (amount > state.availableStars) {
+    toast("⚠️ Not enough stars available!");
+    return false;
+  }
+  
+  const maxTransfer = item.starsNeeded - item.starsTransferred;
+  const actualTransfer = Math.min(amount, maxTransfer);
+  
+  item.starsTransferred += actualTransfer;
+  state.availableStars -= actualTransfer;
+  
+  if (item.starsTransferred >= item.starsNeeded) {
+    item.completed = true;
+    item.starsTransferred = item.starsNeeded; // Cap it
+    toast(`🎉 "${item.name}" completed!`);
+  } else {
+    toast(`⭐ Transferred ${actualTransfer} stars to "${item.name}"`);
+  }
+  
+  saveState();
+  renderWishlist();
+  return true;
+}
+
+function removeWishlistItem(itemId) {
+  const item = state.wishlist.find(item => item.id === itemId);
+  if (item && !item.completed && item.starsTransferred > 0) {
+    if (confirm(`Return ${item.starsTransferred} stars from "${item.name}"?`)) {
+      state.availableStars += item.starsTransferred;
+    }
+  }
+  
+  state.wishlist = state.wishlist.filter(item => item.id !== itemId);
+  saveState();
+  renderWishlist();
+}
+
+function renderWishlist() {
+  el.starsAvailable.textContent = `Stars: ${state.availableStars}⭐`;
+  
+  if (state.wishlist.length === 0) {
+    el.wishlistItems.innerHTML = `
+      <div class="wishlist-empty">
+        <p>No wishlist items yet. Add something you want to save for!</p>
+        <p>You earn 1 star for every 10 points you get from staying under budget.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  el.wishlistItems.innerHTML = state.wishlist.map(item => {
+    const progressPercent = (item.starsTransferred / item.starsNeeded) * 100;
+    const remaining = item.starsNeeded - item.starsTransferred;
+    
+    return `
+      <div class="wishlist-item ${item.completed ? 'completed' : ''}">
+        <div class="wishlist-item-header">
+          <span class="wishlist-item-name">${item.name}</span>
+          <button class="btn danger small" onclick="removeWishlistItem(${item.id})">×</button>
+        </div>
+        <div class="wishlist-progress">
+          <div class="wishlist-progress-bar">
+            <div class="wishlist-progress-fill" style="width: ${progressPercent}%"></div>
+          </div>
+          <span class="wishlist-progress-text">
+            ${item.starsTransferred}/${item.starsNeeded} ⭐
+            ${item.completed ? '✓ COMPLETED' : `(${remaining} left)`}
+          </span>
+        </div>
+        ${!item.completed ? `
+        <div class="wishlist-actions">
+          <span class="transfer-label">Transfer stars:</span>
+          <button class="btn small" onclick="transferStars(${item.id}, 1)">+1⭐</button>
+          <button class="btn small" onclick="transferStars(${item.id}, 5)">+5⭐</button>
+          <button class="btn small primary" onclick="transferStars(${item.id}, 10)">+10⭐</button>
+          <button class="btn small accent" onclick="transferStars(${item.id}, ${remaining})">ALL⭐</button>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 function render() {
   el.day.textContent = state.day;
   el.score.textContent = state.score;
@@ -182,6 +337,7 @@ function render() {
   el.streak.textContent = state.streak;
   el.levelBar.style.width = `${state.levelXP}%`;
   el.livesBar.style.width = `${(state.lives / 3) * 100}%`;
+  el.starsAvailable.textContent = `Stars: ${state.availableStars}⭐`;
 
   // Achievements
   const ach = [];
@@ -209,6 +365,9 @@ function render() {
       `;
     })
     .join("");
+    
+  // Wishlist
+  renderWishlist();
 }
 
 function badge(label, active) {
@@ -233,3 +392,7 @@ function loadState() {
     return { ...defaultState };
   }
 }
+
+// Make functions available globally for onclick handlers
+window.transferStars = transferStars;
+window.removeWishlistItem = removeWishlistItem;
