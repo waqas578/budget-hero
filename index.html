@@ -60,6 +60,30 @@
         <p id="message" class="message"></p>
       </section>
 
+      <section class="wishlist">
+        <div class="wishlist-header">
+          <h2>🎯 Wishlist</h2>
+          <div class="stars-info">
+            <span class="stars-available" id="starsAvailable">Stars: 0</span>
+            <span class="stars-hint">(10 points = 1 star)</span>
+          </div>
+        </div>
+        
+        <div class="wishlist-input-section">
+          <h3>Add Wishlist Item</h3>
+          <div class="wishlist-input">
+            <input type="text" id="wishlistItemInput" placeholder="Item name (e.g., New Laptop, Vacation Trip)" />
+            <input type="number" id="wishlistStarsInput" min="1" max="99999" placeholder="Stars" />
+            <button id="addWishlistItem" class="btn primary">Add Item</button>
+          </div>
+          <p class="wishlist-instruction">Earn stars by staying under budget (10 points = 1 star)</p>
+        </div>
+        
+        <div id="wishlistItems" class="wishlist-items">
+          <!-- Wishlist items will appear here -->
+        </div>
+      </section>
+
       <section id="achievements" class="achievements">
         <!-- Dynamic achievement badges -->
       </section>
