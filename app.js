@@ -134,6 +134,32 @@ function setupEventListeners() {
   });
 }
 
+// Switch view based on currentView
+function switchView(view) {
+  const sections = document.querySelectorAll('section[data-view]');
+  const isMobile = window.innerWidth <= 767;
+  
+  sections.forEach(section => {
+    const views = section.getAttribute('data-view').split(' ');
+    if (isMobile) {
+      // On mobile, only show sections that match the current view
+      if (views.includes(view)) {
+        section.classList.remove('hidden');
+      } else {
+        section.classList.add('hidden');
+      }
+    } else {
+      // On desktop, show all sections
+      section.classList.remove('hidden');
+    }
+  });
+  
+  // Scroll to top when switching views on mobile
+  if (isMobile) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
 // Setup mobile navigation
 function setupMobileNavigation() {
   el.navButtons.forEach(btn => {
@@ -144,8 +170,16 @@ function setupMobileNavigation() {
       btn.classList.add("active");
       
       currentView = target;
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      switchView(target);
     });
+  });
+  
+  // Initial view setup
+  switchView(currentView);
+  
+  // Handle window resize to show/hide sections appropriately
+  window.addEventListener('resize', () => {
+    switchView(currentView);
   });
 }
 
