@@ -518,8 +518,9 @@ input[type="number"]::placeholder, input[type="text"]::placeholder{
 .wishlist-item-header{
   display:flex;
   justify-content:space-between;
-  align-items:center;
+  align-items:flex-start; /* Changed from center to flex-start */
   margin-bottom:12px;
+  gap: 12px; /* Added gap for better spacing */
 }
 
 .wishlist-item-name{
