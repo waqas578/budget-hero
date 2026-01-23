@@ -1082,3 +1082,10 @@ input:focus{
     font-size: 16px; /* Prevent zoom on focus in iOS */
   }
 }
+/* Add this to the bottom of styles.css */
+.wishlist-item-header .btn.danger.small {
+  min-width: 32px;
+  padding: 6px 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
