@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Money Game</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.png">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-content">
+        <h1>💰 Money Game</h1>
+        <p class="subtitle">Spend less, earn points. Adjust anytime.</p>
+      </div>
+      <div class="mobile-quick-stats">
+        <div class="mobile-stat">
+          <span class="mobile-label">Day</span>
+          <span id="mobileDay" class="mobile-value">1</span>
+        </div>
+        <div class="mobile-stat">
+          <span class="mobile-label">Score</span>
+          <span id="mobileScore" class="mobile-value">0</span>
+        </div>
+        <div class="mobile-stat">
+          <span class="mobile-label">Lives</span>
+          <span id="mobileLives" class="mobile-value">3</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="card">
+      <!-- Main Stats Section -->
+      <section class="stats-section">
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="label">Day</span>
+            <span id="day" class="value">1</span>
+          </div>
+          <div class="stat">
+            <span class="label">Score</span>
+            <span id="score" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Lives</span>
+            <span id="lives" class="value">3</span>
+          </div>
+          <div class="stat">
+            <span class="label">Streak</span>
+            <span id="streak" class="value">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Progress Bars -->
+      <section class="progress-section">
+        <div class="progress-row">
+          <div class="progress-info">
+            <span class="progress-label">Level</span>
+            <span class="progress-percent" id="levelPercent">0%</span>
+          </div>
+          <div class="progress-bar"><div id="levelBar" class="bar-fill" style="width:0%"></div></div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-info">
+            <span class="progress-label">Lives</span>
+            <span class="progress-percent" id="livesPercent">100%</span>
+          </div>
+          <div class="progress-bar danger"><div id="livesBar" class="bar-fill" style="width:100%"></div></div>
+        </div>
+      </section>
+
+      <!-- Budget Section -->
+      <section class="input-section">
+        <div class="section-header">
+          <h2>📋 Daily Budget</h2>
+        </div>
+        <div class="input-group">
+          <label for="budgetInput">Daily budget (HKD)</label>
+          <div class="input-with-btn">
+            <input id="budgetInput" type="number" min="0" step="1" placeholder="Enter budget" />
+            <button id="saveBudget" class="btn primary">Save</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Spending Input -->
+      <section class="input-section">
+        <div class="section-header">
+          <h2>💳 Today's Spending</h2>
+        </div>
+        <div class="input-group">
+          <label for="spendInput">Spent today (HKD)</label>
+          <div class="input-with-btn">
+            <input id="spendInput" type="number" min="0" step="1" placeholder="Enter amount" />
+            <button id="submitSpend" class="btn primary large">Submit</button>
+          </div>
+        </div>
+        <p id="message" class="message"></p>
+      </section>
+
+      <!-- Today's Summary -->
+      <section id="todaysSummary" class="summary-section hidden">
+        <div class="section-header">
+          <h2>📊 Today's Summary</h2>
+          <span class="section-hint">Adjustable</span>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-icon">💰</div>
+            <div class="summary-content">
+              <span class="summary-label">Budget</span>
+              <span id="todaysBudget" class="summary-value">0 HKD</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">💸</div>
+            <div class="summary-content">
+              <span class="summary-label">Spent</span>
+              <span id="todaysSpent" class="summary-value spent">0 HKD</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">💎</div>
+            <div class="summary-content">
+              <span class="summary-label">Saved</span>
+              <span id="todaysSaved" class="summary-value saved">0 HKD</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">⭐</div>
+            <div class="summary-content">
+              <span class="summary-label">Points</span>
+              <span id="todaysPoints" class="summary-value">0</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="adjust-section">
+          <div class="adjust-header">
+            <h3>🔄 Adjust Today</h3>
+            <span class="adjust-hint">Enter new amount</span>
+          </div>
+          <div class="input-with-btn">
+            <input type="number" id="adjustInput" min="0" step="1" placeholder="New amount" />
+            <button id="adjustBtn" class="btn primary">Update</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Monthly Summary -->
+      <section class="summary-section">
+        <div class="section-header">
+          <h2>📅 Monthly Summary</h2>
+          <span id="monthLabel" class="section-hint"></span>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-icon">📈</div>
+            <div class="summary-content">
+              <span class="summary-label">Budget</span>
+              <span id="monthlyBudget" class="summary-value">0 HKD</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">📉</div>
+            <div class="summary-content">
+              <span class="summary-label">Spent</span>
+              <span id="monthlySpent" class="summary-value spent">0 HKD</span>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">💰</div>
+            <div class="summary-content">
+              <span class="summary-label">Saved</span>
+              <span id="monthlySaved" class="summary-value saved">0 HKD</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Wishlist -->
+      <section class="wishlist-section">
+        <div class="section-header">
+          <h2>🎯 Wishlist</h2>
+          <div class="stars-display">
+            <span id="starsAvailable" class="stars-count">0 ⭐</span>
+            <span class="stars-hint">10 points = 1 star</span>
+          </div>
+        </div>
+        
+        <div class="wishlist-input-section">
+          <div class="input-group">
+            <input type="text" id="wishlistItemInput" placeholder="What do you want to buy?" />
+            <div class="wishlist-input-row">
+              <input type="number" id="wishlistCostInput" min="0" step="1" placeholder="Cost in HKD" />
+              <button id="addWishlistItem" class="btn primary">Add</button>
+            </div>
+            <div class="auto-star-info">
+              <span id="autoStarCalculation">Enter cost to calculate stars needed</span>
+            </div>
+          </div>
+        </div>
+        
+        <div id="wishlistItems" class="wishlist-items">
+          <div class="empty-state">
+            <div class="empty-icon">🎯</div>
+            <p class="empty-title">No wishlist items yet</p>
+            <p class="empty-subtitle">Add something you want to save for!</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Achievements -->
+      <section id="achievements" class="achievements-section">
+        <div class="section-header">
+          <h2>🏆 Achievements</h2>
+        </div>
+        <div class="achievements-grid">
+          <!-- Dynamic badges will appear here -->
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="history-section">
+        <div class="section-header">
+          <h2>📜 History</h2>
+          <div class="history-actions">
+            <button id="exportBtn" class="btn small">Export</button>
+            <label class="import-label">
+              <input id="importFile" type="file" accept="application/json" />
+              <span class="btn small">Import</span>
+            </label>
+            <button id="resetBtn" class="btn small danger">Reset</button>
+          </div>
+        </div>
+        <div class="history-table">
+          <table id="historyList">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Spent</th>
+                <th>Points</th>
+                <th>Bonus</th>
+                <th>Status</th>
+                <th>Saved</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- History rows will appear here -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-nav">
+      <button class="nav-btn active" data-target="main">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Home</span>
+      </button>
+      <button class="nav-btn" data-target="wishlist">
+        <span class="nav-icon">🎯</span>
+        <span class="nav-label">Wishlist</span>
+      </button>
+      <button class="nav-btn" data-target="history">
+        <span class="nav-icon">📜</span>
+        <span class="nav-label">History</span>
+      </button>
+      <button class="nav-btn" data-target="stats">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Stats</span>
+      </button>
+    </nav>
+
+    <!-- Game Over Overlay -->
+    <div id="overlay" class="overlay hidden">
+      <div class="modal">
+        <div class="modal-icon">💀</div>
+        <h2>Game Over</h2>
+        <p>Your lives reached zero. Want to try again?</p>
+        <div class="modal-actions">
+          <button id="restartBtn" class="btn primary large">Restart Game</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Made for mindful spending • Keep bills paid, level up your choices</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
