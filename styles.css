@@ -526,7 +526,8 @@ input[type="number"]::placeholder, input[type="text"]::placeholder{
 .wishlist-item-name{
   font-weight:600;
   font-size:16px;
-  flex: 1;
+  flex: 1; /* ADD THIS - allows text to wrap */
+  word-break: break-word; /* ADD THIS - breaks long words */
 }
 
 .wishlist-progress{
@@ -1089,4 +1090,6 @@ input:focus{
   padding: 6px 8px;
   font-size: 14px;
   flex-shrink: 0;
+  flex-shrink: 0; /* ADD THIS - prevents button from shrinking */
+  min-width: 32px; /* ADD THIS - minimum width */
 }
