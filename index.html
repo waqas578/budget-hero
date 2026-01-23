@@ -11,7 +11,7 @@
   <div class="app">
     <header class="header">
       <h1>💰 Money Game</h1>
-      <p class="subtitle">Spend less, earn more points.</p>
+      <p class="subtitle">Spend less, earn more points. Adjust anytime.</p>
     </header>
 
     <main class="card">
@@ -55,9 +55,67 @@
 
       <section class="entry">
         <label for="spendInput">Spent today (HKD)</label>
-        <input id="spendInput" type="number" min="0" step="1" placeholder="e.g., 32" />
-        <button id="submitSpend" class="btn primary">Submit</button>
+        <div class="budget-row">
+          <input id="spendInput" type="number" min="0" step="1" placeholder="e.g., 32" />
+          <button id="submitSpend" class="btn primary">Submit</button>
+        </div>
         <p id="message" class="message"></p>
+      </section>
+
+      <!-- Today's Summary Section -->
+      <section id="todaysSummary" class="todays-summary hidden">
+        <div class="todays-summary-header">
+          <h3>📊 Today's Summary</h3>
+          <span class="stars-hint">You can adjust today's spending</span>
+        </div>
+        <div class="todays-stats">
+          <div class="todays-stat">
+            <span class="todays-label">Budget</span>
+            <span id="todaysBudget" class="todays-value">0 HKD</span>
+          </div>
+          <div class="todays-stat">
+            <span class="todays-label">Spent</span>
+            <span id="todaysSpent" class="todays-value spent">0 HKD</span>
+          </div>
+          <div class="todays-stat">
+            <span class="todays-label">Saved</span>
+            <span id="todaysSaved" class="todays-value saved">0 HKD</span>
+          </div>
+          <div class="todays-stat">
+            <span class="todays-label">Points</span>
+            <span id="todaysPoints" class="todays-value">0</span>
+          </div>
+        </div>
+        <div class="adjust-section">
+          <label for="adjustInput">Adjust today's spending:</label>
+          <div class="budget-row">
+            <input type="number" id="adjustInput" min="0" step="1" placeholder="New amount" />
+            <button id="adjustBtn" class="btn primary">Update</button>
+          </div>
+          <p class="adjust-hint">Only today's entry can be adjusted. This will recalculate points and stats.</p>
+        </div>
+      </section>
+
+      <!-- Monthly Summary Section -->
+      <section class="monthly-summary">
+        <div class="monthly-summary-header">
+          <h3>📅 Monthly Summary</h3>
+          <span class="stars-hint">Resets on 1st of each month</span>
+        </div>
+        <div class="monthly-stats">
+          <div class="monthly-stat">
+            <span class="monthly-label">Total Budget</span>
+            <span id="monthlyBudget" class="monthly-value">0 HKD</span>
+          </div>
+          <div class="monthly-stat">
+            <span class="monthly-label">Total Spent</span>
+            <span id="monthlySpent" class="monthly-value spent">0 HKD</span>
+          </div>
+          <div class="monthly-stat">
+            <span class="monthly-label">Total Saved</span>
+            <span id="monthlySaved" class="monthly-value saved">0 HKD</span>
+          </div>
+        </div>
       </section>
 
       <section class="wishlist">
