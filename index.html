@@ -75,12 +75,12 @@
       </section>
 
       <!-- Budget Section -->
-      <section class="input-section" data-view="main">
+      <section class="input-section" id="dailyBudgetSection" data-view="main">
         <div class="section-header">
-          <h2>📋 Daily Budget</h2>
+          <h2 id="dailyBudgetTitle">📋 Daily Budget</h2>
         </div>
         <div class="input-group">
-          <label for="budgetInput">Daily budget (HKD)</label>
+          <label id="dailyBudgetLabel" for="budgetInput">Daily budget (HKD)</label>
           <div class="input-with-btn">
             <input id="budgetInput" type="number" min="0" step="1" placeholder="Enter budget" />
             <button id="saveBudget" class="btn primary">Save</button>
@@ -88,13 +88,30 @@
         </div>
       </section>
 
+      <!-- Monthly Extra Budget (necessities excluded) -->
+      <section class="input-section hidden" id="monthlyBudgetSection" data-view="main">
+        <div class="section-header">
+          <h2 id="monthlyBudgetTitle">📅 Monthly Extra Budget</h2>
+        </div>
+        <div class="input-group">
+          <label for="monthBudgetInput">Monthly extra budget (HKD)</label>
+          <div class="input-with-btn">
+            <input id="monthBudgetInput" type="number" min="0" step="1" placeholder="Enter monthly budget" />
+            <button id="saveMonthBudget" class="btn primary">Save</button>
+          </div>
+          <div class="auto-star-info">
+            Today's allowance (auto): <strong><span id="todayAllowance">0 HKD</span></strong>
+          </div>
+        </div>
+      </section>
+
       <!-- Spending Input -->
       <section class="input-section" data-view="main">
         <div class="section-header">
-          <h2>💳 Today's Spending</h2>
+          <h2 id="spendSectionTitle">💳 Today's Spending</h2>
         </div>
         <div class="input-group">
-          <label for="spendInput">Spent today (HKD)</label>
+          <label id="spendLabel" for="spendInput">Spent today (HKD)</label>
           <div class="input-with-btn">
             <input id="spendInput" type="number" min="0" step="1" placeholder="Enter amount" />
             <button id="submitSpend" class="btn primary large">Submit</button>
@@ -113,7 +130,7 @@
           <div class="summary-card">
             <div class="summary-icon">💰</div>
             <div class="summary-content">
-              <span class="summary-label">Budget</span>
+              <span id="todaysBudgetLabel" class="summary-label">Budget</span>
               <span id="todaysBudget" class="summary-value">0 HKD</span>
             </div>
           </div>
@@ -127,7 +144,7 @@
           <div class="summary-card">
             <div class="summary-icon">💎</div>
             <div class="summary-content">
-              <span class="summary-label">Saved</span>
+              <span id="todaysSavedLabel" class="summary-label">Saved</span>
               <span id="todaysSaved" class="summary-value saved">0 HKD</span>
             </div>
           </div>
@@ -138,6 +155,12 @@
               <span id="todaysPoints" class="summary-value">0</span>
             </div>
           </div>
+        </div>
+
+        <!-- Monthly mode helper text (shows allowance + month remaining) -->
+        <div id="monthlyTodayInfo" class="auto-star-info hidden">
+          <div><strong>Today allowance:</strong> <span id="summaryTodayAllowance">0 HKD</span></div>
+          <div><strong>Month remaining:</strong> <span id="summaryMonthRemaining">0 HKD</span></div>
         </div>
         
         <div class="adjust-section">
@@ -155,28 +178,28 @@
       <!-- Monthly Summary -->
       <section class="summary-section" data-view="main stats">
         <div class="section-header">
-          <h2>📅 Monthly Summary</h2>
+          <h2 id="monthlySummaryTitle">📅 Monthly Summary</h2>
           <span id="monthLabel" class="section-hint"></span>
         </div>
         <div class="summary-grid">
           <div class="summary-card">
             <div class="summary-icon">📈</div>
             <div class="summary-content">
-              <span class="summary-label">Budget</span>
+              <span id="monthlyBudgetLabel" class="summary-label">Budget</span>
               <span id="monthlyBudget" class="summary-value">0 HKD</span>
             </div>
           </div>
           <div class="summary-card">
             <div class="summary-icon">📉</div>
             <div class="summary-content">
-              <span class="summary-label">Spent</span>
+              <span id="monthlySpentLabel" class="summary-label">Spent</span>
               <span id="monthlySpent" class="summary-value spent">0 HKD</span>
             </div>
           </div>
           <div class="summary-card">
             <div class="summary-icon">💰</div>
             <div class="summary-content">
-              <span class="summary-label">Saved</span>
+              <span id="monthlySavedLabel" class="summary-label">Saved</span>
               <span id="monthlySaved" class="summary-value saved">0 HKD</span>
             </div>
           </div>
@@ -286,6 +309,21 @@
         <p>Your lives reached zero. Want to try again?</p>
         <div class="modal-actions">
           <button id="restartBtn" class="btn primary large">Restart Game</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Mode Picker (locks for the month) -->
+    <div id="modeOverlay" class="overlay hidden">
+      <div class="modal">
+        <div class="modal-icon">🗓️</div>
+        <h2>Choose this month’s budget system</h2>
+        <p>
+          Pick one mode for this month. You’ll be able to change it again on the first day of next month.
+        </p>
+        <div class="modal-actions">
+          <button id="chooseDailyMode" class="btn">Daily Budget</button>
+          <button id="chooseMonthlyMode" class="btn primary">Monthly</button>
         </div>
       </div>
     </div>
