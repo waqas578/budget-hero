@@ -106,8 +106,8 @@ const el = {
   // Achievements
   achievements: document.querySelector(".achievements-grid"),
   
-  // Navigation
-  navButtons: document.querySelectorAll(".nav-btn")
+  // Navigation (will be set in initApp after DOM is ready)
+  navButtons: null
 };
 
 // --- Init ---
@@ -127,6 +127,9 @@ function initApp() {
     alert('Error: Some page elements are missing. Please refresh the page.');
     return;
   }
+  
+  // Re-query navigation buttons now that DOM is ready
+  el.navButtons = document.querySelectorAll(".nav-btn");
   
   checkMonthlyReset();
   setupEventListeners();
@@ -315,11 +318,25 @@ function setupEventListeners() {
 
 // Switch view based on currentView
 function switchView(view) {
+  if (!view) {
+    console.warn('switchView called with no view');
+    return;
+  }
+  
   const sections = document.querySelectorAll('section[data-view]');
-  const isMobile = window.innerWidth <= 767;
+  if (sections.length === 0) {
+    console.warn('No sections with data-view found');
+    return;
+  }
+  
+  // Detect mobile - check both window width and user agent for reliability
+  const isMobile = window.innerWidth <= 767 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
   sections.forEach(section => {
-    const views = section.getAttribute('data-view').split(' ');
+    const viewAttr = section.getAttribute('data-view');
+    if (!viewAttr) return;
+    
+    const views = viewAttr.split(' ');
     if (isMobile) {
       // On mobile, only show sections that match the current view
       if (views.includes(view)) {
@@ -342,24 +359,71 @@ function switchView(view) {
 
 // Setup mobile navigation
 function setupMobileNavigation() {
-  el.navButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.target;
+  // Re-query buttons in case they weren't found initially
+  if (!el.navButtons || el.navButtons.length === 0) {
+    el.navButtons = document.querySelectorAll(".nav-btn");
+  }
+  
+  if (!el.navButtons || el.navButtons.length === 0) {
+    console.warn('Navigation buttons not found - retrying...');
+    // Retry after a short delay in case DOM is still loading
+    setTimeout(() => {
+      el.navButtons = document.querySelectorAll(".nav-btn");
+      if (el.navButtons && el.navButtons.length > 0) {
+        setupMobileNavigation();
+      }
+    }, 100);
+    return;
+  }
+  
+  el.navButtons.forEach((btn, index) => {
+    // Remove any existing onclick handlers
+    btn.onclick = null;
+    
+    // Create click handler
+    const clickHandler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       
-      el.navButtons.forEach(b => b.classList.remove("active"));
+      const target = btn.getAttribute('data-target') || btn.dataset.target;
+      if (!target) {
+        console.warn('Button missing data-target:', btn, index);
+        return;
+      }
+      
+      // Update active state
+      el.navButtons.forEach(b => {
+        if (b) b.classList.remove("active");
+      });
       btn.classList.add("active");
       
       currentView = target;
       switchView(target);
-    });
+      
+      // Haptic feedback on iOS
+      if (navigator.vibrate) {
+        navigator.vibrate(10);
+      }
+    };
+    
+    // Add both click and touchstart for better mobile support
+    btn.addEventListener("click", clickHandler, { passive: false });
+    btn.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      clickHandler(e);
+    }, { passive: false });
   });
   
   // Initial view setup
   switchView(currentView);
   
   // Handle window resize to show/hide sections appropriately
+  let resizeTimeout;
   window.addEventListener('resize', () => {
-    switchView(currentView);
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      switchView(currentView);
+    }, 100);
   });
 }
 
