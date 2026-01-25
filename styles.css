@@ -747,6 +747,10 @@ input[type="number"]::placeholder, input[type="text"]::placeholder{
   transition: all 0.2s ease;
   border-radius: 8px;
   margin: 0 4px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .nav-btn.active{
@@ -844,21 +848,15 @@ input[type="number"]::placeholder, input[type="text"]::placeholder{
   display:none !important;
 }
 
+/* Used only for bottom-nav view switching */
+.view-hidden{
+  display:none !important;
+}
+
 /* View switching for mobile */
 @media (max-width: 767px){
   section[data-view]{
     transition: opacity 0.2s ease;
-  }
-  
-  section[data-view].hidden{
-    display: none !important;
-  }
-}
-
-/* Desktop: always show all sections */
-@media (min-width: 768px){
-  section[data-view]{
-    display: block !important;
   }
 }
 
