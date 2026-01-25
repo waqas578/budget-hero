@@ -3,6 +3,10 @@ const STORE_KEY = "moneyGame.v2";
 
 const defaultState = {
   budget: 50,
+  monthBudget: 2000,
+  // Budget system lock: choose once per month
+  budgetMode: "daily", // "daily" | "monthly"
+  budgetModeMonth: null, // YYYY-MM; if not equal to current month, user must pick again
   score: 0,
   lives: 3,
   day: 1,
@@ -43,6 +47,22 @@ const el = {
   // Inputs
   budgetInput: document.getElementById("budgetInput"),
   saveBudget: document.getElementById("saveBudget"),
+  monthBudgetInput: document.getElementById("monthBudgetInput"),
+  saveMonthBudget: document.getElementById("saveMonthBudget"),
+  todayAllowance: document.getElementById("todayAllowance"),
+  dailyBudgetSection: document.getElementById("dailyBudgetSection"),
+  monthlyBudgetSection: document.getElementById("monthlyBudgetSection"),
+  spendSectionTitle: document.getElementById("spendSectionTitle"),
+  spendLabel: document.getElementById("spendLabel"),
+  todaysBudgetLabel: document.getElementById("todaysBudgetLabel"),
+  todaysSavedLabel: document.getElementById("todaysSavedLabel"),
+  monthlyTodayInfo: document.getElementById("monthlyTodayInfo"),
+  summaryTodayAllowance: document.getElementById("summaryTodayAllowance"),
+  summaryMonthRemaining: document.getElementById("summaryMonthRemaining"),
+  monthlySummaryTitle: document.getElementById("monthlySummaryTitle"),
+  monthlyBudgetLabel: document.getElementById("monthlyBudgetLabel"),
+  monthlySpentLabel: document.getElementById("monthlySpentLabel"),
+  monthlySavedLabel: document.getElementById("monthlySavedLabel"),
   spendInput: document.getElementById("spendInput"),
   submitSpend: document.getElementById("submitSpend"),
   message: document.getElementById("message"),
@@ -79,6 +99,9 @@ const el = {
   // Overlay
   overlay: document.getElementById("overlay"),
   restartBtn: document.getElementById("restartBtn"),
+  modeOverlay: document.getElementById("modeOverlay"),
+  chooseDailyMode: document.getElementById("chooseDailyMode"),
+  chooseMonthlyMode: document.getElementById("chooseMonthlyMode"),
   
   // Achievements
   achievements: document.querySelector(".achievements-grid"),
@@ -88,50 +111,206 @@ const el = {
 };
 
 // --- Init ---
-checkMonthlyReset();
-setupEventListeners();
-setupMobileNavigation();
-render();
-el.budgetInput.value = state.budget;
+// Wait for DOM to be fully loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+
+function initApp() {
+  // Check for critical missing elements
+  const criticalElements = ['day', 'score', 'lives', 'budgetInput', 'spendInput', 'submitSpend'];
+  const missing = criticalElements.filter(id => !document.getElementById(id));
+  if (missing.length > 0) {
+    console.error('Missing critical elements:', missing);
+    alert('Error: Some page elements are missing. Please refresh the page.');
+    return;
+  }
+  
+  checkMonthlyReset();
+  setupEventListeners();
+  setupMobileNavigation();
+  ensureBudgetModeLocked();
+  setupNotifications();
+  render();
+  
+  if (el.budgetInput) el.budgetInput.value = state.budget;
+  if (el.monthBudgetInput) el.monthBudgetInput.value = state.monthBudget;
+  updateBudgetModeUI();
+}
+
+// ---------- Budget mode helpers ----------
+function getCurrentMonthKey(d = new Date()) {
+  return d.toISOString().slice(0, 7); // YYYY-MM
+}
+
+function daysInMonth(d = new Date()) {
+  const year = d.getFullYear();
+  const monthIndex = d.getMonth(); // 0-11
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function daysLeftIncludingToday(d = new Date()) {
+  const total = daysInMonth(d);
+  const today = d.getDate();
+  return Math.max(1, total - today + 1);
+}
+
+function getTodaysEntry() {
+  const today = new Date().toISOString().slice(0, 10);
+  return state.history.find(entry => entry.date && entry.date.slice(0, 10) === today) || null;
+}
+
+function recomputeMonthlyData() {
+  const currentMonth = getCurrentMonthKey();
+  const thisMonthEntries = state.history.filter(entry => entry.date && entry.date.startsWith(currentMonth));
+  const totalSpent = thisMonthEntries.reduce((sum, entry) => sum + (entry.spent || 0), 0);
+
+  let totalBudget = 0;
+  if (state.budgetMode === "monthly") {
+    totalBudget = state.monthBudget;
+  } else {
+    // daily mode: sum the daily budgets actually used on each logged day
+    totalBudget = thisMonthEntries.reduce((sum, entry) => sum + (Number.isFinite(entry.budget) ? entry.budget : state.budget), 0);
+  }
+
+  state.monthlyData = {
+    totalBudget: Math.round(totalBudget),
+    totalSpent: Math.round(totalSpent),
+    totalSaved: Math.max(0, Math.round(totalBudget - totalSpent)),
+    month: currentMonth
+  };
+}
+
+function getTodayBudget() {
+  if (state.budgetMode === "monthly") {
+    const todayEntry = getTodaysEntry();
+    if (todayEntry && Number.isFinite(todayEntry.budget)) return Math.max(0, Math.round(todayEntry.budget));
+
+    recomputeMonthlyData();
+    const remaining = Math.max(0, state.monthBudget - state.monthlyData.totalSpent);
+    const daysLeft = daysLeftIncludingToday();
+    return Math.max(0, Math.floor(remaining / daysLeft));
+  }
+
+  // daily mode
+  return Math.max(0, Math.round(state.budget));
+}
+
+function updateBudgetModeUI() {
+  const isMonthly = state.budgetMode === "monthly";
+
+  if (el.dailyBudgetSection) el.dailyBudgetSection.classList.toggle("hidden", isMonthly);
+  if (el.monthlyBudgetSection) el.monthlyBudgetSection.classList.toggle("hidden", !isMonthly);
+  if (el.monthlyTodayInfo) el.monthlyTodayInfo.classList.toggle("hidden", !isMonthly);
+
+  if (el.spendSectionTitle) {
+    el.spendSectionTitle.textContent = isMonthly ? "💳 Today's Extra Spending" : "💳 Today's Spending";
+  }
+  if (el.spendLabel) {
+    el.spendLabel.textContent = isMonthly ? "Extra spent today (HKD)" : "Spent today (HKD)";
+  }
+  if (el.todaysBudgetLabel) {
+    el.todaysBudgetLabel.textContent = isMonthly ? "Allowance" : "Budget";
+  }
+  if (el.todaysSavedLabel) {
+    el.todaysSavedLabel.textContent = isMonthly ? "Remaining today" : "Saved";
+  }
+
+  if (el.monthlySummaryTitle) {
+    el.monthlySummaryTitle.textContent = "📅 Monthly Summary";
+  }
+  if (el.monthlyBudgetLabel) el.monthlyBudgetLabel.textContent = isMonthly ? "Extra Budget" : "Budget";
+  if (el.monthlySpentLabel) el.monthlySpentLabel.textContent = isMonthly ? "Extra Spent" : "Spent";
+  if (el.monthlySavedLabel) el.monthlySavedLabel.textContent = isMonthly ? "Remaining" : "Saved";
+}
+
+function ensureBudgetModeLocked() {
+  const currentMonth = getCurrentMonthKey();
+
+  // If already locked for this month, do nothing
+  if (state.budgetModeMonth === currentMonth) return;
+
+  // Show modal overlay and force a choice
+  if (!el.modeOverlay) return;
+  el.modeOverlay.classList.remove("hidden");
+
+  // Prevent clicking outside to dismiss (lock choice)
+  const onOverlayClick = (e) => {
+    if (e.target === el.modeOverlay) {
+      toast("⚠️ Choose a mode to continue.");
+    }
+  };
+  el.modeOverlay.addEventListener("click", onOverlayClick);
+
+  const finish = (mode) => {
+    state.budgetMode = mode;
+    state.budgetModeMonth = currentMonth;
+    saveState();
+
+    el.modeOverlay.classList.add("hidden");
+    el.modeOverlay.removeEventListener("click", onOverlayClick);
+
+    updateBudgetModeUI();
+    render();
+    toast(mode === "monthly" ? "✅ Monthly mode set for this month." : "✅ Daily budget mode set for this month.");
+  };
+
+  // One-shot handlers each time we show modal
+  if (el.chooseDailyMode) {
+    el.chooseDailyMode.onclick = () => finish("daily");
+  }
+  if (el.chooseMonthlyMode) {
+    el.chooseMonthlyMode.onclick = () => finish("monthly");
+  }
+}
 
 // Setup event listeners
 function setupEventListeners() {
   // Save budget
-  el.saveBudget.addEventListener("click", saveBudget);
+  if (el.saveBudget) el.saveBudget.addEventListener("click", saveBudget);
+  
+  // Save monthly budget
+  if (el.saveMonthBudget) el.saveMonthBudget.addEventListener("click", saveMonthBudget);
   
   // Submit spending
-  el.submitSpend.addEventListener("click", submitSpending);
+  if (el.submitSpend) el.submitSpend.addEventListener("click", submitSpending);
   
   // Add wishlist item
-  el.addWishlistItem.addEventListener("click", addWishlistItem);
+  if (el.addWishlistItem) el.addWishlistItem.addEventListener("click", addWishlistItem);
   
   // Auto-calculate stars when cost is entered
-  el.wishlistCostInput.addEventListener("input", calculateStarsFromCost);
+  if (el.wishlistCostInput) el.wishlistCostInput.addEventListener("input", calculateStarsFromCost);
   
   // Export
-  el.exportBtn.addEventListener("click", exportData);
+  if (el.exportBtn) el.exportBtn.addEventListener("click", exportData);
   
   // Import
-  el.importFile.addEventListener("change", importData);
+  if (el.importFile) el.importFile.addEventListener("change", importData);
   
   // Reset
-  el.resetBtn.addEventListener("click", resetData);
+  if (el.resetBtn) el.resetBtn.addEventListener("click", resetData);
   
   // Restart
-  el.restartBtn.addEventListener("click", restartGame);
+  if (el.restartBtn) el.restartBtn.addEventListener("click", restartGame);
   
   // Adjust spending
-  el.adjustBtn.addEventListener("click", adjustSpending);
+  if (el.adjustBtn) el.adjustBtn.addEventListener("click", adjustSpending);
   
   // Allow Enter key to submit spending
-  el.spendInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") submitSpending();
-  });
+  if (el.spendInput) {
+    el.spendInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") submitSpending();
+    });
+  }
   
   // Allow Enter key to add wishlist item
-  el.wishlistItemInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") addWishlistItem();
-  });
+  if (el.wishlistItemInput) {
+    el.wishlistItemInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") addWishlistItem();
+    });
+  }
 }
 
 // Switch view based on currentView
@@ -144,13 +323,14 @@ function switchView(view) {
     if (isMobile) {
       // On mobile, only show sections that match the current view
       if (views.includes(view)) {
-        section.classList.remove('hidden');
+        section.classList.remove('view-hidden');
       } else {
-        section.classList.add('hidden');
+        section.classList.add('view-hidden');
       }
     } else {
-      // On desktop, show all sections
-      section.classList.remove('hidden');
+      // On desktop, view switching should not affect layout
+      // (do NOT touch `.hidden`, it's used by app logic like today's summary)
+      section.classList.remove('view-hidden');
     }
   });
   
@@ -190,6 +370,9 @@ function checkMonthlyReset() {
   if (state.lastLifeReset !== currentMonth) {
     state.lives = 3;
     state.lastLifeReset = currentMonth;
+
+    // Force picking a mode for the new month
+    state.budgetModeMonth = null;
     
     state.monthlyData = {
       totalBudget: 0,
@@ -293,15 +476,35 @@ function saveBudget() {
     state.budget = Math.round(val);
     saveState();
     toast("✅ Budget saved.");
+    recomputeMonthlyData();
     updateTodaysSummary();
+    render();
     vibrate();
   } else {
     toast("⚠️ Enter a valid budget.");
   }
 }
 
+function saveMonthBudget() {
+  const val = Number(el.monthBudgetInput.value);
+  if (Number.isFinite(val) && val >= 0) {
+    state.monthBudget = Math.round(val);
+    saveState();
+    toast("✅ Monthly extra budget saved.");
+    recomputeMonthlyData();
+    updateTodaysSummary();
+    render();
+    vibrate();
+  } else {
+    toast("⚠️ Enter a valid monthly budget.");
+  }
+}
+
 // Submit spending
 function submitSpending() {
+  ensureBudgetModeLocked();
+  if (state.budgetModeMonth !== getCurrentMonthKey()) return;
+
   const spent = Number(el.spendInput.value);
   if (!Number.isFinite(spent) || spent < 0) {
     toast("⚠️ Enter a valid amount.");
@@ -342,7 +545,8 @@ function addWishlistItem() {
     starsNeeded: Math.round(starsNeeded),
     starsTransferred: 0,
     completed: false,
-    redeemed: false
+    redeemed: false,
+    lastTransferTime: null // Track when stars were last transferred to this item
   };
   
   state.wishlist.push(newItem);
@@ -384,15 +588,26 @@ async function importData(e) {
     }
     
     state = { ...defaultState, ...data };
+
+    // Ensure new fields exist
+    if (!Number.isFinite(state.monthBudget)) {
+      state.monthBudget = defaultState.monthBudget;
+    }
+    if (state.budgetMode !== "daily" && state.budgetMode !== "monthly") {
+      state.budgetMode = defaultState.budgetMode;
+    }
     
     if (!state.monthlyData) {
       state.monthlyData = defaultState.monthlyData;
     }
     
-    // Ensure history entries have saved field
+    // Ensure history entries have budget + saved field
     state.history.forEach(entry => {
+      if (!Number.isFinite(entry.budget)) {
+        entry.budget = state.budget; // legacy default (daily mode)
+      }
       if (entry.saved === undefined) {
-        entry.saved = Math.max(0, state.budget - entry.spent);
+        entry.saved = Math.max(0, entry.budget - entry.spent);
       }
     });
     
@@ -463,21 +678,9 @@ function adjustSpending() {
 
 // Update monthly data
 function updateMonthlyData(spent) {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  
-  if (state.monthlyData.month !== currentMonth) {
-    state.monthlyData = {
-      totalBudget: state.budget,
-      totalSpent: spent,
-      totalSaved: Math.max(0, state.budget - spent),
-      month: currentMonth
-    };
-    return;
-  }
-  
-  state.monthlyData.totalBudget += state.budget;
-  state.monthlyData.totalSpent += spent;
-  state.monthlyData.totalSaved = Math.max(0, state.monthlyData.totalBudget - state.monthlyData.totalSpent);
+  // Backward-compatible wrapper: we now recompute from history for accuracy.
+  // (Different logic depending on daily vs monthly mode.)
+  recomputeMonthlyData();
 }
 
 // Update today's summary
@@ -489,11 +692,18 @@ function updateTodaysSummary() {
   
   if (todaysEntry) {
     el.todaysSummary.classList.remove("hidden");
-    el.todaysBudget.textContent = `${state.budget} HKD`;
+    const b = Number.isFinite(todaysEntry.budget) ? todaysEntry.budget : getTodayBudget();
+    el.todaysBudget.textContent = `${Math.round(b)} HKD`;
     el.todaysSpent.textContent = `${todaysEntry.spent} HKD`;
     el.todaysSaved.textContent = `${todaysEntry.saved || 0} HKD`;
     el.todaysPoints.textContent = `${todaysEntry.points || 0}`;
     el.adjustInput.placeholder = `Current: ${todaysEntry.spent}`;
+
+    // Monthly mode extra info (allowance + month remaining)
+    if (state.budgetMode === "monthly") {
+      if (el.summaryTodayAllowance) el.summaryTodayAllowance.textContent = `${Math.round(b)} HKD`;
+      if (el.summaryMonthRemaining) el.summaryMonthRemaining.textContent = `${state.monthlyData.totalSaved} HKD`;
+    }
   } else {
     el.todaysSummary.classList.add("hidden");
   }
@@ -514,9 +724,9 @@ function adjustTodaysSpending(newSpent) {
   const oldEntry = state.history[todaysIndex];
   const oldSpent = oldEntry.spent;
   const oldPoints = oldEntry.points || 0;
-  const oldSaved = oldEntry.saved || 0;
   const oldOverspent = oldEntry.overspent || false;
   const oldBonus = oldEntry.bonus || 0;
+  const dayBudget = Number.isFinite(oldEntry.budget) ? oldEntry.budget : getTodayBudget();
   
   // Remove old impact
   state.score -= oldPoints;
@@ -531,23 +741,15 @@ function adjustTodaysSpending(newSpent) {
     state.levelXP = Math.max(0, state.levelXP - 10);
   }
   
-  const oldStars = Math.floor(oldPoints / 10);
-  if (oldStars > 0) {
-    state.availableStars = Math.max(0, state.availableStars - oldStars);
-  }
-  
-  state.monthlyData.totalSpent -= oldSpent;
-  state.monthlyData.totalSaved = Math.max(0, state.monthlyData.totalBudget - state.monthlyData.totalSpent);
-  
-  // Calculate new values
+  // Calculate new values first to know the net star change
   let newPoints = 0;
   let newBonus = 0;
   let newOverspent = false;
   let newSaved = 0;
   
-  if (newSpent <= state.budget) {
-    newPoints = Math.round((state.budget - newSpent) * 2);
-    newSaved = state.budget - newSpent;
+  if (newSpent <= dayBudget) {
+    newPoints = Math.round((dayBudget - newSpent) * 2);
+    newSaved = dayBudget - newSpent;
     state.score += newPoints;
     
     if (!oldOverspent) {
@@ -557,17 +759,6 @@ function adjustTodaysSpending(newSpent) {
     }
     
     state.levelXP = Math.min(100, state.levelXP + Math.min(20, newPoints / 2));
-    
-    const newStars = Math.floor(newPoints / 10);
-    if (newStars > 0) {
-      state.availableStars += newStars;
-    }
-    
-    if (oldBonus > 0) {
-      newBonus = oldBonus;
-      state.score += newBonus;
-      state.levelXP = Math.min(100, state.levelXP + 10);
-    }
   } else {
     newOverspent = true;
     newSaved = 0;
@@ -578,8 +769,34 @@ function adjustTodaysSpending(newSpent) {
     }
   }
   
-  state.monthlyData.totalSpent += newSpent;
-  state.monthlyData.totalSaved = Math.max(0, state.monthlyData.totalBudget - state.monthlyData.totalSpent);
+  // Handle star changes: we need to "undo" oldStars and "add" newStars
+  // If oldStars were transferred to wishlist, we need to reclaim them first
+  const oldStars = Math.floor(oldPoints / 10);
+  const newStars = Math.floor(newPoints / 10);
+  const currentAvailable = state.availableStars;
+  const starsFromOldEntry = oldStars;
+  
+  // If we don't have enough available stars to cover oldStars, they must be in wishlist
+  if (currentAvailable < starsFromOldEntry) {
+    // Reclaim the stars that were transferred from this entry
+    const toReclaim = starsFromOldEntry - currentAvailable;
+    const reclaimed = reclaimStarsFromWishlist(toReclaim);
+    state.availableStars = currentAvailable + reclaimed;
+  }
+  
+  // Now remove oldStars and add newStars (net change)
+  const netStarChange = newStars - oldStars;
+  state.availableStars += netStarChange;
+  
+  // Ensure we don't go negative (shouldn't happen, but safety check)
+  state.availableStars = Math.max(0, state.availableStars);
+  
+  // Handle bonus (preserve if it existed)
+  if (oldBonus > 0 && !newOverspent) {
+    newBonus = oldBonus;
+    state.score += newBonus;
+    state.levelXP = Math.min(100, state.levelXP + 10);
+  }
   
   // Update the entry
   state.history[todaysIndex] = {
@@ -588,10 +805,12 @@ function adjustTodaysSpending(newSpent) {
     points: newPoints,
     bonus: newBonus,
     overspent: newOverspent,
-    saved: newSaved
+    saved: Math.max(0, Math.round(newSaved)),
+    budget: Math.round(dayBudget)
   };
   
   saveState();
+  recomputeMonthlyData();
   render();
   
   const diff = newSpent - oldSpent;
@@ -606,14 +825,19 @@ function adjustTodaysSpending(newSpent) {
 // Process day
 function processDay(spent) {
   checkMonthlyReset();
+  ensureBudgetModeLocked();
+  if (state.budgetModeMonth !== getCurrentMonthKey()) return;
+
+  recomputeMonthlyData();
+  const todayBudget = getTodayBudget();
   
   let points = 0;
   let bonus = 0;
   let overspent = false;
   let message = "";
 
-  if (spent <= state.budget) {
-    points = Math.round((state.budget - spent) * 2);
+  if (spent <= todayBudget) {
+    points = Math.round((todayBudget - spent) * 2);
     state.score += points;
     state.streak += 1;
     state.levelXP = Math.min(100, state.levelXP + Math.min(20, points / 2));
@@ -640,13 +864,7 @@ function processDay(spent) {
     message += `⚠️ Overspent! Lost a life. Lives left: ${state.lives}. `;
   }
 
-  updateMonthlyData(spent);
-  
-  const savedToday = Math.max(0, state.budget - spent);
-  message += ` Today: ${state.budget} - ${spent} = ${savedToday} HKD saved.`;
-  
-  const monthlySaved = state.monthlyData.totalSaved;
-  message += ` Monthly: ${state.monthlyData.totalBudget} - ${state.monthlyData.totalSpent} = ${monthlySaved} HKD saved.`;
+  const savedToday = Math.max(0, todayBudget - spent);
 
   state.history.push({
     date: new Date().toISOString(),
@@ -654,8 +872,20 @@ function processDay(spent) {
     points,
     bonus,
     overspent,
-    saved: savedToday
+    saved: Math.round(savedToday),
+    budget: Math.round(todayBudget),
+    mode: state.budgetMode
   });
+
+  recomputeMonthlyData();
+
+  if (state.budgetMode === "monthly") {
+    message += ` Today: ${todayBudget} - ${spent} = ${savedToday} HKD remaining today.`;
+    message += ` Month remaining: ${state.monthBudget} - ${state.monthlyData.totalSpent} = ${state.monthlyData.totalSaved} HKD.`;
+  } else {
+    message += ` Today: ${todayBudget} - ${spent} = ${savedToday} HKD saved.`;
+    message += ` Monthly: ${state.monthlyData.totalBudget} - ${state.monthlyData.totalSpent} = ${state.monthlyData.totalSaved} HKD saved.`;
+  }
 
   state.day += 1;
 
@@ -685,13 +915,13 @@ function confirmRemoveWishlistItem(itemId) {
   `;
   
   const modalOverlay = document.createElement('div');
-  modalOverlay.className = 'overlay';
+  modalOverlay.className = 'overlay wishlist-confirm-overlay';
   modalOverlay.innerHTML = confirmationHTML;
   document.body.appendChild(modalOverlay);
   
   modalOverlay.addEventListener('click', (e) => {
     if (e.target === modalOverlay) {
-      document.body.removeChild(modalOverlay);
+      modalOverlay.remove();
     }
   });
 }
@@ -700,8 +930,8 @@ function handleWishlistRemoval(itemId, action) {
   const item = state.wishlist.find(item => item.id === itemId);
   if (!item) return;
   
-  const modal = document.querySelector('.overlay:not(#overlay)');
-  if (modal) document.body.removeChild(modal);
+  const modal = document.querySelector('.wishlist-confirm-overlay');
+  if (modal) modal.remove();
   
   if (action === 'redeem') {
     item.redeemed = true;
@@ -732,6 +962,67 @@ function handleWishlistRemoval(itemId, action) {
   }
 }
 
+// Reclaim stars from wishlist items when needed (e.g., after spending adjustment)
+// Returns the amount reclaimed (does NOT modify availableStars - caller handles that)
+// Reclaims from LATEST deposits first (most recent transfers first)
+function reclaimStarsFromWishlist(needed) {
+  if (needed <= 0) return 0;
+  
+  let reclaimed = 0;
+  const reclaimedFrom = [];
+  
+  // Create a copy of wishlist items that can be reclaimed, sorted by lastTransferTime (most recent first)
+  const reclaimableItems = state.wishlist
+    .filter(item => {
+      // Can't reclaim from redeemed items
+      if (item.completed && item.redeemed) return false;
+      // Must have stars transferred
+      return item.starsTransferred > 0;
+    })
+    .sort((a, b) => {
+      // Sort by lastTransferTime (most recent first)
+      // Items with no lastTransferTime go to the end (oldest items)
+      const timeA = a.lastTransferTime || 0;
+      const timeB = b.lastTransferTime || 0;
+      return timeB - timeA; // Descending order (newest first)
+    });
+  
+  // Reclaim from items in order (latest deposits first)
+  for (const item of reclaimableItems) {
+    if (reclaimed >= needed) break;
+    
+    const canReclaim = Math.min(item.starsTransferred, needed - reclaimed);
+    item.starsTransferred -= canReclaim;
+    reclaimed += canReclaim;
+    
+    // If we reclaimed all stars, reset lastTransferTime
+    if (item.starsTransferred === 0) {
+      item.lastTransferTime = null;
+    }
+    
+    if (item.completed && !item.redeemed) {
+      // If it was completed but not redeemed, un-complete it
+      item.completed = false;
+    }
+    
+    if (canReclaim > 0) {
+      reclaimedFrom.push({ name: item.name, amount: canReclaim });
+    }
+  }
+  
+  if (reclaimed > 0) {
+    saveState();
+    renderWishlist(); // Update wishlist display immediately
+    
+    if (reclaimedFrom.length > 0) {
+      const names = reclaimedFrom.map(r => `${r.amount}⭐ from "${r.name}"`).join(", ");
+      toast(`↩️ Reclaimed ${reclaimed} stars: ${names}`);
+    }
+  }
+  
+  return reclaimed;
+}
+
 function transferStars(itemId, amount) {
   const item = state.wishlist.find(item => item.id === itemId);
   if (!item || item.completed) return false;
@@ -745,6 +1036,7 @@ function transferStars(itemId, amount) {
   const actualTransfer = Math.min(amount, maxTransfer);
   
   item.starsTransferred += actualTransfer;
+  item.lastTransferTime = Date.now(); // Track when stars were transferred
   state.availableStars -= actualTransfer;
   
   if (item.starsTransferred >= item.starsNeeded) {
@@ -766,148 +1058,173 @@ function removeWishlistItem(itemId) {
 }
 
 function renderWishlist() {
-  el.starsAvailable.textContent = `${state.availableStars} ⭐`;
-  
-  if (state.wishlist.length === 0) {
-    el.wishlistItems.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🎯</div>
-        <p class="empty-title">No wishlist items yet</p>
-        <p class="empty-subtitle">Add something you want to save for!</p>
-        <p class="empty-subtitle">Earn 1 star for every 10 points</p>
-      </div>
-    `;
-    return;
-  }
-  
-  el.wishlistItems.innerHTML = state.wishlist.map(item => {
-    const progressPercent = (item.starsTransferred / item.starsNeeded) * 100;
-    const remaining = item.starsNeeded - item.starsTransferred;
+  try {
+    if (el.starsAvailable) el.starsAvailable.textContent = `${state.availableStars} ⭐`;
     
-    return `
-      <div class="wishlist-item ${item.completed ? 'completed' : ''}">
-        <div class="wishlist-item-header">
-          <div>
-            <span class="wishlist-item-name">${item.name}</span>
-            <div class="wishlist-item-cost">Cost: $${item.cost} HKD</div>
+    if (!el.wishlistItems) return;
+    
+    if (state.wishlist.length === 0) {
+      el.wishlistItems.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🎯</div>
+          <p class="empty-title">No wishlist items yet</p>
+          <p class="empty-subtitle">Add something you want to save for!</p>
+          <p class="empty-subtitle">Earn 1 star for every 10 points</p>
+        </div>
+      `;
+      return;
+    }
+  
+    el.wishlistItems.innerHTML = state.wishlist.map(item => {
+      const progressPercent = (item.starsTransferred / item.starsNeeded) * 100;
+      const remaining = item.starsNeeded - item.starsTransferred;
+      
+      return `
+        <div class="wishlist-item ${item.completed ? 'completed' : ''}">
+          <div class="wishlist-item-header">
+            <div>
+              <span class="wishlist-item-name">${item.name}</span>
+              <div class="wishlist-item-cost">Cost: $${item.cost} HKD</div>
+            </div>
+            <button class="btn danger small" onclick="removeWishlistItem(${item.id})">×</button>
           </div>
-          <button class="btn danger small" onclick="removeWishlistItem(${item.id})">×</button>
-        </div>
-        <div class="wishlist-progress">
-          <div class="wishlist-progress-bar">
-            <div class="wishlist-progress-fill" style="width: ${progressPercent}%"></div>
+          <div class="wishlist-progress">
+            <div class="wishlist-progress-bar">
+              <div class="wishlist-progress-fill" style="width: ${progressPercent}%"></div>
+            </div>
+            <span class="wishlist-progress-text">
+              ${item.starsTransferred}/${item.starsNeeded} ⭐
+              ${item.completed ? 
+                (item.redeemed ? '🛒 REDEEMED' : '✓ READY') : 
+                `(${remaining} left)`}
+            </span>
           </div>
-          <span class="wishlist-progress-text">
-            ${item.starsTransferred}/${item.starsNeeded} ⭐
-            ${item.completed ? 
-              (item.redeemed ? '🛒 REDEEMED' : '✓ READY') : 
-              `(${remaining} left)`}
-          </span>
+          ${!item.completed ? `
+          <div class="wishlist-actions">
+            <span class="transfer-label">Transfer stars:</span>
+            <button class="btn small" onclick="transferStars(${item.id}, 1)">+1⭐</button>
+            <button class="btn small" onclick="transferStars(${item.id}, 5)">+5⭐</button>
+            <button class="btn small primary" onclick="transferStars(${item.id}, 10)">+10⭐</button>
+            <button class="btn small accent" onclick="transferStars(${item.id}, ${remaining})">ALL⭐</button>
+          </div>
+          ` : ''}
+          ${item.completed && !item.redeemed ? `
+          <div class="wishlist-actions">
+            <button class="btn small primary" onclick="handleWishlistRemoval(${item.id}, 'redeem')">
+              🛒 Mark as Redeemed
+            </button>
+          </div>
+          ` : ''}
         </div>
-        ${!item.completed ? `
-        <div class="wishlist-actions">
-          <span class="transfer-label">Transfer stars:</span>
-          <button class="btn small" onclick="transferStars(${item.id}, 1)">+1⭐</button>
-          <button class="btn small" onclick="transferStars(${item.id}, 5)">+5⭐</button>
-          <button class="btn small primary" onclick="transferStars(${item.id}, 10)">+10⭐</button>
-          <button class="btn small accent" onclick="transferStars(${item.id}, ${remaining})">ALL⭐</button>
-        </div>
-        ` : ''}
-        ${item.completed && !item.redeemed ? `
-        <div class="wishlist-actions">
-          <button class="btn small primary" onclick="handleWishlistRemoval(${item.id}, 'redeem')">
-            🛒 Mark as Redeemed
-          </button>
-        </div>
-        ` : ''}
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+  } catch (error) {
+    console.error('Error in renderWishlist():', error);
+  }
 }
 
 function render() {
-  // Update main stats
-  el.day.textContent = state.day;
-  el.score.textContent = state.score;
-  el.lives.textContent = state.lives;
-  el.streak.textContent = state.streak;
-  
-  // Update mobile stats
-  el.mobileDay.textContent = state.day;
-  el.mobileScore.textContent = state.score;
-  el.mobileLives.textContent = state.lives;
-  
-  // Update progress bars
-  el.levelBar.style.width = `${state.levelXP}%`;
-  el.levelPercent.textContent = `${state.levelXP}%`;
-  el.livesBar.style.width = `${(state.lives / 3) * 100}%`;
-  el.livesPercent.textContent = `${Math.round((state.lives / 3) * 100)}%`;
-  
-  // Update stars
-  el.starsAvailable.textContent = `${state.availableStars} ⭐`;
-  
-  // Update monthly summary
-  el.monthlyBudget.textContent = `${state.monthlyData.totalBudget} HKD`;
-  el.monthlySpent.textContent = `${state.monthlyData.totalSpent} HKD`;
-  el.monthlySaved.textContent = `${state.monthlyData.totalSaved} HKD`;
-  
-  // Update month label
-  el.monthLabel.textContent = state.monthlyData.month;
-  
-  // Update today's summary
-  updateTodaysSummary();
-  
-  // Update achievements
-  const ach = [];
-  if (state.streak >= 3) ach.push(badge("🔥 3-day streak", true));
-  else ach.push(badge("🔥 3-day streak", false));
-  
-  if (state.streak >= 7) ach.push(badge("💪 7-day streak", true));
-  else ach.push(badge("💪 7-day streak", false));
-  
-  if (state.streak >= 14) ach.push(badge("🏆 14-day streak", true));
-  else ach.push(badge("🏆 14-day streak", false));
-  
-  if (state.score >= 500) ach.push(badge("💡 Smart choices", true));
-  else ach.push(badge("💡 Smart choices", false));
-  
-  if (state.levelXP >= 50) ach.push(badge("🚀 Level master", true));
-  else ach.push(badge("🚀 Level master", false));
-  
-  if (state.availableStars >= 20) ach.push(badge("⭐ Star saver", true));
-  else ach.push(badge("⭐ Star saver", false));
-  
-  el.achievements.innerHTML = ach.join("");
-  
-  // Update history
-  const historyHTML = state.history
-    .slice()
-    .reverse()
-    .map(item => {
-      const d = new Date(item.date);
-      const dateStr = d.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      
-      return `
-        <tr>
-          <td>${dateStr}</td>
-          <td>${item.spent} HKD</td>
-          <td>${item.points} ${item.bonus ? `+${item.bonus} 🎉` : ''}</td>
-          <td>${item.bonus ? '🎉' : '-'}</td>
-          <td><span class="status ${item.overspent ? 'danger' : 'success'}">${item.overspent ? '❌ Overspent' : '✅ Saved'}</span></td>
-          <td class="muted">${item.saved || 0} HKD</td>
-        </tr>
-      `;
-    })
-    .join("");
+  try {
+    updateBudgetModeUI();
+    recomputeMonthlyData();
+
+    // Update main stats
+    if (el.day) el.day.textContent = state.day;
+    if (el.score) el.score.textContent = state.score;
+    if (el.lives) el.lives.textContent = state.lives;
+    if (el.streak) el.streak.textContent = state.streak;
     
-  el.historyList.innerHTML = historyHTML;
+    // Update mobile stats
+    if (el.mobileDay) el.mobileDay.textContent = state.day;
+    if (el.mobileScore) el.mobileScore.textContent = state.score;
+    if (el.mobileLives) el.mobileLives.textContent = state.lives;
     
-  renderWishlist();
+    // Update progress bars
+    if (el.levelBar) el.levelBar.style.width = `${state.levelXP}%`;
+    if (el.levelPercent) el.levelPercent.textContent = `${state.levelXP}%`;
+    if (el.livesBar) el.livesBar.style.width = `${(state.lives / 3) * 100}%`;
+    if (el.livesPercent) el.livesPercent.textContent = `${Math.round((state.lives / 3) * 100)}%`;
+    
+    // Update stars
+    if (el.starsAvailable) el.starsAvailable.textContent = `${state.availableStars} ⭐`;
+
+    // Update monthly-mode allowance display
+    if (el.todayAllowance) {
+      el.todayAllowance.textContent = `${getTodayBudget()} HKD`;
+    }
+    // Monthly-mode extra info block in Today's Summary
+    if (state.budgetMode === "monthly") {
+      if (el.summaryTodayAllowance) el.summaryTodayAllowance.textContent = `${getTodayBudget()} HKD`;
+      if (el.summaryMonthRemaining) el.summaryMonthRemaining.textContent = `${state.monthlyData.totalSaved} HKD`;
+    }
+    
+    // Update monthly summary
+    if (el.monthlyBudget) el.monthlyBudget.textContent = `${state.monthlyData.totalBudget} HKD`;
+    if (el.monthlySpent) el.monthlySpent.textContent = `${state.monthlyData.totalSpent} HKD`;
+    if (el.monthlySaved) el.monthlySaved.textContent = `${state.monthlyData.totalSaved} HKD`;
+    
+    // Update month label
+    if (el.monthLabel) el.monthLabel.textContent = state.monthlyData.month;
+    
+    // Update today's summary
+    updateTodaysSummary();
+    
+    // Update achievements
+    const ach = [];
+    if (state.streak >= 3) ach.push(badge("🔥 3-day streak", true));
+    else ach.push(badge("🔥 3-day streak", false));
+    
+    if (state.streak >= 7) ach.push(badge("💪 7-day streak", true));
+    else ach.push(badge("💪 7-day streak", false));
+    
+    if (state.streak >= 14) ach.push(badge("🏆 14-day streak", true));
+    else ach.push(badge("🏆 14-day streak", false));
+    
+    if (state.score >= 500) ach.push(badge("💡 Smart choices", true));
+    else ach.push(badge("💡 Smart choices", false));
+    
+    if (state.levelXP >= 50) ach.push(badge("🚀 Level master", true));
+    else ach.push(badge("🚀 Level master", false));
+    
+    if (state.availableStars >= 20) ach.push(badge("⭐ Star saver", true));
+    else ach.push(badge("⭐ Star saver", false));
+    
+    if (el.achievements) el.achievements.innerHTML = ach.join("");
+    
+    // Update history
+    if (el.historyList) {
+      const historyHTML = state.history
+        .slice()
+        .reverse()
+        .map(item => {
+          const d = new Date(item.date);
+          const dateStr = d.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          
+          return `
+            <tr>
+              <td>${dateStr}</td>
+              <td>${item.spent} HKD</td>
+              <td>${item.points} ${item.bonus ? `+${item.bonus} 🎉` : ''}</td>
+              <td>${item.bonus ? '🎉' : '-'}</td>
+              <td><span class="status ${item.overspent ? 'danger' : 'success'}">${item.overspent ? '❌ Overspent' : '✅ Saved'}</span></td>
+              <td class="muted">${item.saved || 0} HKD</td>
+            </tr>
+          `;
+        })
+        .join("");
+        
+      el.historyList.innerHTML = historyHTML;
+    }
+    
+    renderWishlist();
+  } catch (error) {
+    console.error('Error in render():', error);
+  }
 }
 
 function badge(label, active) {
@@ -915,13 +1232,17 @@ function badge(label, active) {
 }
 
 function toast(text) {
-  el.message.textContent = text;
-  // Auto-clear message after 5 seconds
-  setTimeout(() => {
-    if (el.message.textContent === text) {
-      el.message.textContent = '';
-    }
-  }, 5000);
+  if (el.message) {
+    el.message.textContent = text;
+    // Auto-clear message after 5 seconds
+    setTimeout(() => {
+      if (el.message && el.message.textContent === text) {
+        el.message.textContent = '';
+      }
+    }, 5000);
+  } else {
+    console.log('Toast:', text);
+  }
 }
 
 function vibrate() {
@@ -942,6 +1263,14 @@ function loadState() {
   try {
     const parsed = JSON.parse(raw);
     const loaded = { ...defaultState, ...parsed };
+
+    // Ensure new fields exist / are valid
+    if (!Number.isFinite(loaded.monthBudget)) {
+      loaded.monthBudget = defaultState.monthBudget;
+    }
+    if (loaded.budgetMode !== "daily" && loaded.budgetMode !== "monthly") {
+      loaded.budgetMode = defaultState.budgetMode;
+    }
     
     // Ensure monthlyData exists
     if (!loaded.monthlyData) {
@@ -962,14 +1291,17 @@ function loadState() {
       }
     }
     
-    // Ensure history entries have saved field
+    // Ensure history entries have budget + saved field
     loaded.history.forEach(entry => {
+      if (!Number.isFinite(entry.budget)) {
+        entry.budget = loaded.budget; // legacy default (daily mode)
+      }
       if (entry.saved === undefined) {
-        entry.saved = Math.max(0, loaded.budget - entry.spent);
+        entry.saved = Math.max(0, entry.budget - entry.spent);
       }
     });
     
-    // Ensure wishlist items have cost field for backward compatibility
+    // Ensure wishlist items have cost field and lastTransferTime for backward compatibility
     loaded.wishlist.forEach(item => {
       if (item.cost === undefined) {
         // Estimate cost from stars (5 HKD per star)
@@ -978,11 +1310,165 @@ function loadState() {
       if (item.redeemed === undefined) {
         item.redeemed = false;
       }
+      // Add lastTransferTime if missing (for items created before this feature)
+      if (item.lastTransferTime === undefined) {
+        // If item has stars transferred, assume it was transferred when item was created
+        // (we can't know the exact time, so use item.id which is a timestamp)
+        item.lastTransferTime = item.starsTransferred > 0 ? item.id : null;
+      }
     });
     
     return loaded;
   } catch {
     return { ...defaultState };
+  }
+}
+
+// ---------- iOS Notification System (every 2 hours, 9am-12am) ----------
+function setupNotifications() {
+  // Request notification permission (works on iOS Safari when added to home screen)
+  if ('Notification' in window) {
+    if (Notification.permission === 'default') {
+      // Request permission after a short delay (better UX)
+      setTimeout(() => {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            scheduleNotifications();
+            toast('✅ Notifications enabled! You\'ll be reminded every 2 hours.');
+          } else {
+            toast('ℹ️ Enable notifications in Settings to get reminders.');
+          }
+        });
+      }, 1000);
+    } else if (Notification.permission === 'granted') {
+      scheduleNotifications();
+    }
+  } else {
+    // Notifications not supported
+    console.log('Notifications not supported in this browser');
+  }
+  
+  // Check periodically (every minute) to show notifications when time matches
+  // This is important for iOS since background notifications have limitations
+  setInterval(checkNotificationTime, 60000); // Check every minute
+}
+
+function scheduleNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+  
+  // Schedule notifications for today (9am, 11am, 1pm, 3pm, 5pm, 7pm, 9pm, 11pm)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const notificationTimes = [9, 11, 13, 15, 17, 19, 21, 23]; // 9am to 11pm (24-hour format)
+  
+  notificationTimes.forEach(hour => {
+    const notificationTime = new Date(today);
+    notificationTime.setHours(hour, 0, 0, 0);
+    
+    // Only schedule if time hasn't passed today
+    if (notificationTime > now) {
+      const delay = notificationTime.getTime() - now.getTime();
+      if (delay > 0 && delay < 86400000) { // Within 24 hours
+        setTimeout(() => {
+          showNotification();
+        }, delay);
+      }
+    }
+  });
+}
+
+function checkNotificationTime() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+  
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  
+  // Check if it's exactly on the hour (9, 11, 13, 15, 17, 19, 21, 23) and minute is 0-1
+  // (Allow 1 minute window in case check runs slightly late)
+  const notificationHours = [9, 11, 13, 15, 17, 19, 21, 23];
+  if (notificationHours.includes(hour) && (minute === 0 || minute === 1)) {
+    // Check if we already showed notification for this hour today
+    const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    const lastNotificationKey = `lastNotification_${todayKey}_${hour}`;
+    const lastNotification = localStorage.getItem(lastNotificationKey);
+    
+    // Only show if we haven't shown one in the last 5 minutes
+    if (!lastNotification) {
+      showNotification();
+      localStorage.setItem(lastNotificationKey, now.toISOString());
+      
+      // Clear old entries (older than today)
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('lastNotification_') && !key.includes(todayKey)) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+  }
+}
+
+function showNotification() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+  
+  // Close any existing notification first
+  if (window.currentNotification) {
+    window.currentNotification.close();
+  }
+  
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysEntry = state.history.find(entry => entry.date && entry.date.slice(0, 10) === today);
+  
+  let message = '💰 Time to update your spending!';
+  if (todaysEntry) {
+    const spent = todaysEntry.spent;
+    const budget = todaysEntry.budget || (state.budgetMode === 'monthly' ? getTodayBudget() : state.budget);
+    const remaining = Math.max(0, budget - spent);
+    message = `💰 Update spending! Today: ${spent} HKD spent, ${remaining} HKD remaining.`;
+  } else {
+    if (state.budgetMode === 'monthly') {
+      const allowance = getTodayBudget();
+      message = `💰 Update spending! Today's allowance: ${allowance} HKD.`;
+    } else {
+      message = `💰 Update spending! Today's budget: ${state.budget} HKD.`;
+    }
+  }
+  
+  try {
+    const notification = new Notification('Money Game Reminder', {
+      body: message,
+      icon: '/icon.png',
+      badge: '/icon.png',
+      tag: 'money-game-reminder',
+      requireInteraction: false,
+      silent: false
+    });
+    
+    window.currentNotification = notification;
+    
+    notification.onclick = () => {
+      window.focus();
+      if (window.currentNotification) {
+        window.currentNotification.close();
+        window.currentNotification = null;
+      }
+    };
+    
+    // Auto-close after 8 seconds (iOS notifications stay longer)
+    setTimeout(() => {
+      if (window.currentNotification) {
+        window.currentNotification.close();
+        window.currentNotification = null;
+      }
+    }, 8000);
+  } catch (error) {
+    console.error('Error showing notification:', error);
   }
 }
 
