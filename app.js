@@ -90,6 +90,18 @@ const el = {
   starsAvailable: document.getElementById("starsAvailable"),
   autoStarCalculation: document.getElementById("autoStarCalculation"),
   
+  // Detailed Stats
+  statsMonthlySpent: document.getElementById("statsMonthlySpent"),
+  statsRedeemed: document.getElementById("statsRedeemed"),
+  statsStarsAvailable: document.getElementById("statsStarsAvailable"),
+  statsWishlistCount: document.getElementById("statsWishlistCount"),
+  statsMonthBudget: document.getElementById("statsMonthBudget"),
+  statsMonthSpent: document.getElementById("statsMonthSpent"),
+  statsMonthRedeemed: document.getElementById("statsMonthRedeemed"),
+  statsNetSavings: document.getElementById("statsNetSavings"),
+  statsSavingRate: document.getElementById("statsSavingRate"),
+  statsTotalSavings: document.getElementById("statsTotalSavings"),
+  
   // History
   historyList: document.querySelector("#historyList tbody"),
   exportBtn: document.getElementById("exportBtn"),
@@ -569,6 +581,17 @@ function submitSpending() {
   ensureBudgetModeLocked();
   if (state.budgetModeMonth !== getCurrentMonthKey()) return;
 
+  // Check if spending has already been submitted today
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysEntry = state.history.find(entry => 
+    entry.date && entry.date.slice(0, 10) === today
+  );
+  
+  if (todaysEntry) {
+    toast("⚠️ You already submitted spending today. Use the Adjust section to make changes.");
+    return;
+  }
+
   const spent = Number(el.spendInput.value);
   if (!Number.isFinite(spent) || spent < 0) {
     toast("⚠️ Enter a valid amount.");
@@ -918,7 +941,9 @@ function processDay(spent) {
       bonus = 50;
       state.score += bonus;
       state.levelXP = Math.min(100, state.levelXP + 10);
-      message += `🎉 Bonus! +${bonus} points. `;
+      const bonusStars = Math.floor(bonus / 10);
+      state.availableStars += bonusStars;
+      message += `🎉 Bonus! +${bonus} points (+${bonusStars}⭐). `;
     }
   } else {
     overspent = true;
@@ -1009,17 +1034,31 @@ function handleWishlistRemoval(itemId, action) {
     }
     
     saveState();
+    // Remove the redeemed item from the wishlist
+    state.wishlist = state.wishlist.filter(w => w.id !== itemId);
+    saveState();
     renderWishlist();
+    render(); // Re-render to update monthly savings display
+    
+    // Deduct the redeemed amount from total savings AFTER render (which recalculates monthly data)
+    state.monthlyData.totalSaved = Math.max(0, state.monthlyData.totalSaved - item.cost);
+    
+    // Update the display with the deducted amount
+    if (el.monthlySaved) el.monthlySaved.textContent = `${state.monthlyData.totalSaved} HKD`;
+    if (el.summaryMonthRemaining) el.summaryMonthRemaining.textContent = `${state.monthlyData.totalSaved} HKD`;
+    
+    saveState();
     vibrate();
   } else {
-    if (!item.completed && item.starsTransferred > 0) {
+    // When canceling: return all stars to available pool
+    if (item.starsTransferred > 0) {
       state.availableStars += item.starsTransferred;
       toast(`↩️ Canceled "${item.name}" - returned ${item.starsTransferred} stars.`);
     } else {
       toast(`❌ Canceled "${item.name}"`);
     }
     
-    state.wishlist = state.wishlist.filter(item => item.id !== itemId);
+    state.wishlist = state.wishlist.filter(w => w.id !== itemId);
     saveState();
     renderWishlist();
     vibrate();
@@ -1127,7 +1166,10 @@ function renderWishlist() {
     
     if (!el.wishlistItems) return;
     
-    if (state.wishlist.length === 0) {
+    // Filter out redeemed items
+    const activeWishlistItems = state.wishlist.filter(item => !item.redeemed);
+    
+    if (activeWishlistItems.length === 0) {
       el.wishlistItems.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">🎯</div>
@@ -1139,7 +1181,7 @@ function renderWishlist() {
       return;
     }
   
-    el.wishlistItems.innerHTML = state.wishlist.map(item => {
+    el.wishlistItems.innerHTML = activeWishlistItems.map(item => {
       const progressPercent = (item.starsTransferred / item.starsNeeded) * 100;
       const remaining = item.starsNeeded - item.starsTransferred;
       
@@ -1255,6 +1297,9 @@ function render() {
     
     if (el.achievements) el.achievements.innerHTML = ach.join("");
     
+    // Update detailed stats
+    updateDetailedStats();
+    
     // Update history
     if (el.historyList) {
       const historyHTML = state.history
@@ -1293,6 +1338,44 @@ function render() {
 
 function badge(label, active) {
   return `<span class="badge ${active ? "active" : ""}">${label}</span>`;
+}
+
+function updateDetailedStats() {
+  try {
+    // Calculate total redeemed from wishlist
+    const redeemedItems = state.wishlist.filter(item => item.redeemed);
+    const totalRedeemed = redeemedItems.reduce((sum, item) => sum + (item.cost || 0), 0);
+    
+    // Count active wishlist items
+    const activeWishlistItems = state.wishlist.filter(item => !item.redeemed);
+    
+    // Calculate net savings (total budget - spent - redeemed)
+    const netSavings = Math.max(0, state.monthlyData.totalSaved - totalRedeemed);
+    
+    // Calculate saving rate
+    let savingRate = 0;
+    if (state.monthlyData.totalBudget > 0) {
+      savingRate = Math.round((netSavings / state.monthlyData.totalBudget) * 100);
+    }
+    
+    // Update stats cards
+    if (el.statsMonthlySpent) el.statsMonthlySpent.textContent = `${state.monthlyData.totalSpent} HKD`;
+    if (el.statsRedeemed) el.statsRedeemed.textContent = `${totalRedeemed} HKD`;
+    if (el.statsStarsAvailable) el.statsStarsAvailable.textContent = `${state.availableStars}`;
+    if (el.statsWishlistCount) el.statsWishlistCount.textContent = `${activeWishlistItems.length}`;
+    
+    // Update breakdown section
+    if (el.statsMonthBudget) el.statsMonthBudget.textContent = `${state.monthlyData.totalBudget} HKD`;
+    if (el.statsMonthSpent) el.statsMonthSpent.textContent = `${state.monthlyData.totalSpent} HKD`;
+    if (el.statsMonthRedeemed) el.statsMonthRedeemed.textContent = `${totalRedeemed} HKD`;
+    if (el.statsNetSavings) el.statsNetSavings.textContent = `${netSavings} HKD`;
+    if (el.statsSavingRate) el.statsSavingRate.textContent = `${savingRate}%`;
+    
+    // Update total savings at the end
+    if (el.statsTotalSavings) el.statsTotalSavings.textContent = `${netSavings} HKD`;
+  } catch (error) {
+    console.error('Error in updateDetailedStats():', error);
+  }
 }
 
 function toast(text) {
