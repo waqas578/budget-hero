@@ -20,6 +20,7 @@ const defaultState = {
     totalBudget: 0,
     totalSpent: 0,
     totalSaved: 0,
+    totalRedeemed: 0,
     month: new Date().toISOString().slice(0, 7)
   }
 };
@@ -80,6 +81,7 @@ const el = {
   monthlyBudget: document.getElementById("monthlyBudget"),
   monthlySpent: document.getElementById("monthlySpent"),
   monthlySaved: document.getElementById("monthlySaved"),
+  monthlyNetSavings: document.getElementById("monthlyNetSavings"),
   monthLabel: document.getElementById("monthLabel"),
   
   // Wishlist
@@ -190,10 +192,14 @@ function recomputeMonthlyData() {
     totalBudget = thisMonthEntries.reduce((sum, entry) => sum + (Number.isFinite(entry.budget) ? entry.budget : state.budget), 0);
   }
 
+  // Preserve any tracked redeemed total when recomputing (redeemed is tracked separately)
+  const prevRedeemed = (state.monthlyData && Number.isFinite(state.monthlyData.totalRedeemed)) ? state.monthlyData.totalRedeemed : 0;
+
   state.monthlyData = {
     totalBudget: Math.round(totalBudget),
     totalSpent: Math.round(totalSpent),
     totalSaved: Math.max(0, Math.round(totalBudget - totalSpent)),
+    totalRedeemed: Math.round(prevRedeemed),
     month: currentMonth
   };
 }
@@ -976,6 +982,9 @@ function processDay(spent) {
     message += ` Monthly: ${state.monthlyData.totalBudget} - ${state.monthlyData.totalSpent} = ${state.monthlyData.totalSaved} HKD saved.`;
   }
 
+
+  // Increase daily budget by 100 every day
+  state.budget = (state.budget || 0) + 100;
   state.day += 1;
 
   saveState();
@@ -1028,26 +1037,19 @@ function handleWishlistRemoval(itemId, action) {
     
     if (item.starsTransferred > 0) {
       const starsEquivalent = item.starsTransferred * 10;
-      toast(`🎉 "${item.name}" redeemed! Cost: ${starsEquivalent} points of savings.`);
+      toast(`🎉 "${item.name}" redeemed! Cost: ${item.cost} HKD.`);
     } else {
       toast(`🎉 "${item.name}" marked as redeemed!`);
     }
     
-    saveState();
+    // Track redeemed total separately so it isn't overwritten by recomputeMonthlyData
+    state.monthlyData.totalRedeemed = Math.round((state.monthlyData.totalRedeemed || 0) + (item.cost || 0));
+
     // Remove the redeemed item from the wishlist
     state.wishlist = state.wishlist.filter(w => w.id !== itemId);
     saveState();
     renderWishlist();
-    render(); // Re-render to update monthly savings display
-    
-    // Deduct the redeemed amount from total savings AFTER render (which recalculates monthly data)
-    state.monthlyData.totalSaved = Math.max(0, state.monthlyData.totalSaved - item.cost);
-    
-    // Update the display with the deducted amount
-    if (el.monthlySaved) el.monthlySaved.textContent = `${state.monthlyData.totalSaved} HKD`;
-    if (el.summaryMonthRemaining) el.summaryMonthRemaining.textContent = `${state.monthlyData.totalSaved} HKD`;
-    
-    saveState();
+    render(); // Re-render to update all displays including monthly summary
     vibrate();
   } else {
     // When canceling: return all stars to available pool
@@ -1264,11 +1266,17 @@ function render() {
       if (el.summaryMonthRemaining) el.summaryMonthRemaining.textContent = `${state.monthlyData.totalSaved} HKD`;
     }
     
+    // Use tracked redeemed total (persisted in monthlyData)
+    const totalRedeemed = Number.isFinite(state.monthlyData.totalRedeemed) ? state.monthlyData.totalRedeemed : 0;
+    // Calculate net savings (saved - redeemed)
+    const netSavings = Math.max(0, state.monthlyData.totalSaved - (totalRedeemed || 0));
+
     // Update monthly summary
     if (el.monthlyBudget) el.monthlyBudget.textContent = `${state.monthlyData.totalBudget} HKD`;
     if (el.monthlySpent) el.monthlySpent.textContent = `${state.monthlyData.totalSpent} HKD`;
-    if (el.monthlySaved) el.monthlySaved.textContent = `${state.monthlyData.totalSaved} HKD`;
-    
+    // Show net savings as 'Saved' (deducting redeemed)
+    if (el.monthlySaved) el.monthlySaved.textContent = `${netSavings} HKD`;
+    if (el.monthlyNetSavings) el.monthlyNetSavings.textContent = `${netSavings} HKD`;
     // Update month label
     if (el.monthLabel) el.monthLabel.textContent = state.monthlyData.month;
     
@@ -1342,9 +1350,8 @@ function badge(label, active) {
 
 function updateDetailedStats() {
   try {
-    // Calculate total redeemed from wishlist
-    const redeemedItems = state.wishlist.filter(item => item.redeemed);
-    const totalRedeemed = redeemedItems.reduce((sum, item) => sum + (item.cost || 0), 0);
+    // Use tracked redeemed total (persisted in monthlyData)
+    const totalRedeemed = Number.isFinite(state.monthlyData.totalRedeemed) ? state.monthlyData.totalRedeemed : 0;
     
     // Count active wishlist items
     const activeWishlistItems = state.wishlist.filter(item => !item.redeemed);
@@ -1437,6 +1444,11 @@ function loadState() {
         loaded.monthlyData.month = currentMonth;
       }
     }
+    // Ensure totalRedeemed exists
+    if (!loaded.monthlyData) loaded.monthlyData = { ...defaultState.monthlyData };
+    if (!Number.isFinite(loaded.monthlyData.totalRedeemed)) {
+      loaded.monthlyData.totalRedeemed = 0;
+    }
     
     // Ensure history entries have budget + saved field
     loaded.history.forEach(entry => {
@@ -1464,6 +1476,11 @@ function loadState() {
         item.lastTransferTime = item.starsTransferred > 0 ? item.id : null;
       }
     });
+    // Migrate totalRedeemed from wishlist if not present
+    if (!Number.isFinite(loaded.monthlyData.totalRedeemed)) {
+      const redeemedSum = (loaded.wishlist || []).filter(i => i.redeemed).reduce((s, it) => s + (it.cost || 0), 0);
+      loaded.monthlyData.totalRedeemed = redeemedSum;
+    }
     
     return loaded;
   } catch {
