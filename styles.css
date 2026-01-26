@@ -431,6 +431,158 @@ input[type="number"]::placeholder, input[type="text"]::placeholder{
   color:var(--muted);
 }
 
+/* Detailed Stats Section */
+.detailed-stats-section{
+  padding: 20px;
+}
+
+.stats-details-grid{
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stats-card{
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stats-icon{
+  font-size: 24px;
+  background: rgba(255,255,255,0.05);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stats-info{
+  flex: 1;
+  min-width: 0;
+}
+
+.stats-label{
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.stats-value{
+  font-weight: 700;
+  font-size: 16px;
+  display: block;
+  word-break: break-word;
+}
+
+.stats-breakdown{
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.stats-breakdown .section-header{
+  margin: 0 0 16px 0;
+  padding: 0;
+  border: none;
+}
+
+.stats-breakdown h3{
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.breakdown-items{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.breakdown-item{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.breakdown-item:last-child{
+  border-bottom: none;
+}
+
+.breakdown-label{
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.breakdown-value{
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.breakdown-value.spent{
+  color: var(--danger);
+}
+
+.breakdown-value.saved{
+  color: var(--accent2);
+}
+
+.stats-summary{
+  display: flex;
+  gap: 12px;
+}
+
+.summary-box{
+  flex: 1;
+  background: rgba(61,220,151,0.1);
+  border: 1px solid var(--accent2);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.summary-box.success{
+  background: rgba(61,220,151,0.05);
+  border-color: var(--accent2);
+}
+
+.summary-icon{
+  font-size: 32px;
+}
+
+.summary-text{
+  flex: 1;
+}
+
+.summary-title{
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.summary-amount{
+  display: block;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--accent2);
+}
+
 /* Wishlist Section */
 .wishlist-section{
   padding: 20px;
