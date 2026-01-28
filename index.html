@@ -219,7 +219,7 @@
           <h2>🎯 Wishlist</h2>
           <div class="stars-display">
             <span id="starsAvailable" class="stars-count">0 ⭐</span>
-            <span class="stars-hint">10 points = 1 star</span>
+            <span id="starsHint" class="stars-hint">10 points = 1 star</span>
           </div>
         </div>
         
@@ -294,6 +294,41 @@
 
       </section>
 
+      <!-- Settings -->
+      <section class="settings-section" data-view="settings">
+        <div class="section-header">
+          <h2>⚙️ Settings</h2>
+        </div>
+        <div class="settings-list">
+          <div class="settings-item">
+            <label for="settingsPointsPerStar">Points per star</label>
+            <p class="settings-desc">1 star = this many points (e.g. 10 or 20). Affects how quickly you earn stars.</p>
+            <input id="settingsPointsPerStar" type="number" min="1" max="1000" step="1" value="10" />
+          </div>
+          <div class="settings-item">
+            <div class="settings-toggle-row">
+              <div>
+                <label for="settingsNotificationsToggle">Spending reminders</label>
+                <p class="settings-desc">Notifications every 2 hours (9am–11pm) to log spending. On iPhone: add to Home Screen and allow in Settings &gt; Notifications.</p>
+              </div>
+              <input id="settingsNotificationsToggle" type="checkbox" checked />
+            </div>
+          </div>
+          <div class="settings-item">
+            <div class="settings-toggle-row">
+              <div>
+                <label for="settingsHapticsToggle">Haptic feedback</label>
+                <p class="settings-desc">Vibration when you tap buttons.</p>
+              </div>
+              <input id="settingsHapticsToggle" type="checkbox" checked />
+            </div>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button id="settingsSaveBtn" class="btn primary">Save settings</button>
+        </div>
+      </section>
+
       <!-- History -->
       <section class="history-section" data-view="history">
         <div class="section-header">
@@ -344,6 +379,10 @@
       <button class="nav-btn" data-target="stats">
         <span class="nav-icon">📊</span>
         <span class="nav-label">Stats</span>
+      </button>
+      <button class="nav-btn" data-target="settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Settings</span>
       </button>
     </nav>
 
