@@ -16,6 +16,10 @@ const defaultState = {
   wishlist: [],
   availableStars: 0,
   lastLifeReset: new Date().toISOString().slice(0, 7),
+  // Settings
+  pointsPerStar: 10,      // e.g. 10 or 20 points = 1 star
+  notificationsEnabled: true,
+  hapticsEnabled: true,
   monthlyData: {
     totalBudget: 0,
     totalSpent: 0,
@@ -27,6 +31,7 @@ const defaultState = {
 
 let state = loadState();
 let currentView = 'main';
+let _notifIntervalId = null;
 
 // --- Elements ---
 const el = {
@@ -121,7 +126,14 @@ const el = {
   achievements: document.querySelector(".achievements-grid"),
   
   // Navigation (will be set in initApp after DOM is ready)
-  navButtons: null
+  navButtons: null,
+
+  // Settings
+  settingsPointsPerStar: document.getElementById("settingsPointsPerStar"),
+  settingsNotificationsToggle: document.getElementById("settingsNotificationsToggle"),
+  settingsHapticsToggle: document.getElementById("settingsHapticsToggle"),
+  settingsSaveBtn: document.getElementById("settingsSaveBtn"),
+  starsHint: document.getElementById("starsHint")
 };
 
 // --- Init ---
@@ -150,6 +162,10 @@ function initApp() {
   setupMobileNavigation();
   ensureBudgetModeLocked();
   setupNotifications();
+  // When app comes to foreground (e.g. iPhone), check if we should show a reminder
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkNotificationTime();
+  });
   render();
   
   if (el.budgetInput) el.budgetInput.value = state.budget;
@@ -217,6 +233,11 @@ function getTodayBudget() {
 
   // daily mode
   return Math.max(0, Math.round(state.budget));
+}
+
+function getPointsPerStar() {
+  const v = state.pointsPerStar;
+  return (Number.isFinite(v) && v >= 1) ? Math.round(v) : 10;
 }
 
 function updateBudgetModeUI() {
@@ -313,6 +334,9 @@ function setupEventListeners() {
   // Reset
   if (el.resetBtn) el.resetBtn.addEventListener("click", resetData);
   
+  // Settings
+  if (el.settingsSaveBtn) el.settingsSaveBtn.addEventListener("click", saveSettings);
+  
   // Restart
   if (el.restartBtn) el.restartBtn.addEventListener("click", restartGame);
   
@@ -373,6 +397,13 @@ function switchView(view) {
   if (isMobile) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  // Populate Settings form when switching to settings view
+  if (view === 'settings') {
+    if (el.settingsPointsPerStar) el.settingsPointsPerStar.value = getPointsPerStar();
+    if (el.settingsNotificationsToggle) el.settingsNotificationsToggle.checked = state.notificationsEnabled !== false;
+    if (el.settingsHapticsToggle) el.settingsHapticsToggle.checked = state.hapticsEnabled !== false;
+  }
 }
 
 // Setup mobile navigation
@@ -418,10 +449,7 @@ function setupMobileNavigation() {
       currentView = target;
       switchView(target);
       
-      // Haptic feedback on iOS
-      if (navigator.vibrate) {
-        navigator.vibrate(10);
-      }
+      vibrate(10);
     };
     
     // Add both click and touchstart for better mobile support
@@ -478,9 +506,10 @@ function calculateStarsFromCost() {
     return;
   }
   
-  // Base calculation: 1 star = 10 points = roughly 5 HKD saved
-  // (since 2 points per HKD saved, and 10 points = 1 star)
-  let baseStars = Math.ceil(cost / 5);
+  // Base: 2 points per HKD saved, and getPointsPerStar() points = 1 star
+  // => 1 star = (getPointsPerStar()/2) HKD saved
+  const pps = getPointsPerStar();
+  let baseStars = Math.ceil((cost * 2) / pps);
   
   // Smart adjustments based on user's spending behavior
   let adjustment = 0;
@@ -580,6 +609,27 @@ function saveMonthBudget() {
   } else {
     toast("⚠️ Enter a valid monthly budget.");
   }
+}
+
+function saveSettings() {
+  const pps = Number(el.settingsPointsPerStar?.value);
+  if (Number.isFinite(pps) && pps >= 1 && pps <= 1000) {
+    state.pointsPerStar = Math.round(pps);
+  } else {
+    toast("⚠️ Points per star must be between 1 and 1000.");
+    return;
+  }
+  state.notificationsEnabled = !!el.settingsNotificationsToggle?.checked;
+  state.hapticsEnabled = !!el.settingsHapticsToggle?.checked;
+  saveState();
+  if (state.notificationsEnabled) {
+    setupNotifications();
+  } else if (_notifIntervalId) {
+    clearInterval(_notifIntervalId);
+    _notifIntervalId = null;
+  }
+  toast("✅ Settings saved.");
+  vibrate();
 }
 
 // Submit spending
@@ -705,15 +755,21 @@ async function importData(e) {
     });
     
     // Ensure wishlist items have cost field for backward compatibility
+    const hkdPerStar = Math.max(1, getPointsPerStar() / 2);
     state.wishlist.forEach(item => {
       if (item.cost === undefined) {
-        // Estimate cost from stars (5 HKD per star)
-        item.cost = item.starsNeeded * 5;
+        item.cost = item.starsNeeded * hkdPerStar;
       }
       if (item.redeemed === undefined) {
         item.redeemed = false;
       }
     });
+
+    // Normalize settings
+    const pps = state.pointsPerStar;
+    state.pointsPerStar = (Number.isFinite(pps) && pps >= 1) ? Math.round(Math.min(1000, pps)) : defaultState.pointsPerStar;
+    if (typeof state.notificationsEnabled !== "boolean") state.notificationsEnabled = defaultState.notificationsEnabled;
+    if (typeof state.hapticsEnabled !== "boolean") state.hapticsEnabled = defaultState.hapticsEnabled;
     
     saveState();
     render();
@@ -864,8 +920,9 @@ function adjustTodaysSpending(newSpent) {
   
   // Handle star changes: we need to "undo" oldStars and "add" newStars
   // If oldStars were transferred to wishlist, we need to reclaim them first
-  const oldStars = Math.floor(oldPoints / 10);
-  const newStars = Math.floor(newPoints / 10);
+  const pps = getPointsPerStar();
+  const oldStars = Math.floor(oldPoints / pps);
+  const newStars = Math.floor(newPoints / pps);
   const currentAvailable = state.availableStars;
   const starsFromOldEntry = oldStars;
   
@@ -935,7 +992,7 @@ function processDay(spent) {
     state.streak += 1;
     state.levelXP = Math.min(100, state.levelXP + Math.min(20, points / 2));
     
-    const starsEarned = Math.floor(points / 10);
+    const starsEarned = Math.floor(points / getPointsPerStar());
     if (starsEarned > 0) {
       state.availableStars += starsEarned;
       message += `✅ Under budget! +${points} points (+${starsEarned}⭐). `;
@@ -947,7 +1004,7 @@ function processDay(spent) {
       bonus = 50;
       state.score += bonus;
       state.levelXP = Math.min(100, state.levelXP + 10);
-      const bonusStars = Math.floor(bonus / 10);
+      const bonusStars = Math.floor(bonus / getPointsPerStar());
       state.availableStars += bonusStars;
       message += `🎉 Bonus! +${bonus} points (+${bonusStars}⭐). `;
     }
@@ -1036,7 +1093,6 @@ function handleWishlistRemoval(itemId, action) {
     item.completed = true;
     
     if (item.starsTransferred > 0) {
-      const starsEquivalent = item.starsTransferred * 10;
       toast(`🎉 "${item.name}" redeemed! Cost: ${item.cost} HKD.`);
     } else {
       toast(`🎉 "${item.name}" marked as redeemed!`);
@@ -1165,6 +1221,7 @@ function removeWishlistItem(itemId) {
 function renderWishlist() {
   try {
     if (el.starsAvailable) el.starsAvailable.textContent = `${state.availableStars} ⭐`;
+    if (el.starsHint) el.starsHint.textContent = `${getPointsPerStar()} points = 1 star`;
     
     if (!el.wishlistItems) return;
     
@@ -1177,7 +1234,7 @@ function renderWishlist() {
           <div class="empty-icon">🎯</div>
           <p class="empty-title">No wishlist items yet</p>
           <p class="empty-subtitle">Add something you want to save for!</p>
-          <p class="empty-subtitle">Earn 1 star for every 10 points</p>
+          <p class="empty-subtitle">Earn 1 star for every ${getPointsPerStar()} points</p>
         </div>
       `;
       return;
@@ -1399,10 +1456,9 @@ function toast(text) {
   }
 }
 
-function vibrate() {
-  // Simple haptic feedback for mobile
-  if (navigator.vibrate) {
-    navigator.vibrate(50);
+function vibrate(ms) {
+  if (state.hapticsEnabled !== false && navigator.vibrate) {
+    navigator.vibrate(ms ?? 50);
   }
 }
 
@@ -1425,6 +1481,11 @@ function loadState() {
     if (loaded.budgetMode !== "daily" && loaded.budgetMode !== "monthly") {
       loaded.budgetMode = defaultState.budgetMode;
     }
+    // Settings
+    const pps = loaded.pointsPerStar;
+    loaded.pointsPerStar = (Number.isFinite(pps) && pps >= 1) ? Math.round(Math.min(1000, pps)) : defaultState.pointsPerStar;
+    if (typeof loaded.notificationsEnabled !== "boolean") loaded.notificationsEnabled = defaultState.notificationsEnabled;
+    if (typeof loaded.hapticsEnabled !== "boolean") loaded.hapticsEnabled = defaultState.hapticsEnabled;
     
     // Ensure monthlyData exists
     if (!loaded.monthlyData) {
@@ -1461,10 +1522,11 @@ function loadState() {
     });
     
     // Ensure wishlist items have cost field and lastTransferTime for backward compatibility
+    const hkdPerStar = Math.max(1, (loaded.pointsPerStar || 10) / 2); // 2 points per HKD saved
     loaded.wishlist.forEach(item => {
       if (item.cost === undefined) {
-        // Estimate cost from stars (5 HKD per star)
-        item.cost = item.starsNeeded * 5;
+        // Estimate cost from stars (HKD per star = pointsPerStar/2)
+        item.cost = item.starsNeeded * hkdPerStar;
       }
       if (item.redeemed === undefined) {
         item.redeemed = false;
@@ -1490,6 +1552,10 @@ function loadState() {
 
 // ---------- iOS Notification System (every 2 hours, 9am-12am) ----------
 function setupNotifications() {
+  if (state.notificationsEnabled === false) {
+    if (_notifIntervalId) { clearInterval(_notifIntervalId); _notifIntervalId = null; }
+    return;
+  }
   // Request notification permission (works on iOS Safari when added to home screen)
   if ('Notification' in window) {
     if (Notification.permission === 'default') {
@@ -1514,7 +1580,8 @@ function setupNotifications() {
   
   // Check periodically (every minute) to show notifications when time matches
   // This is important for iOS since background notifications have limitations
-  setInterval(checkNotificationTime, 60000); // Check every minute
+  if (_notifIntervalId) clearInterval(_notifIntervalId);
+  _notifIntervalId = setInterval(checkNotificationTime, 60000);
 }
 
 function scheduleNotifications() {
@@ -1544,6 +1611,7 @@ function scheduleNotifications() {
 }
 
 function checkNotificationTime() {
+  if (state.notificationsEnabled === false) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') {
     return;
   }
@@ -1577,6 +1645,7 @@ function checkNotificationTime() {
 }
 
 function showNotification() {
+  if (state.notificationsEnabled === false) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') {
     return;
   }
@@ -1605,10 +1674,9 @@ function showNotification() {
   }
   
   try {
+    // Omit icon/badge: they can 404 or cause issues on iOS; title+body work reliably
     const notification = new Notification('Money Game Reminder', {
       body: message,
-      icon: '/icon.png',
-      badge: '/icon.png',
       tag: 'money-game-reminder',
       requireInteraction: false,
       silent: false
