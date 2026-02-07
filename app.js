@@ -8,9 +8,7 @@ const defaultState = {
   budgetMode: "daily", // "daily" | "monthly"
   budgetModeMonth: null, // YYYY-MM; if not equal to current month, user must pick again
   score: 0,
-  lives: 3,
   day: 1,
-  streak: 0,
   levelXP: 0,
   history: [],
   wishlist: [],
@@ -38,17 +36,12 @@ const el = {
   // Main stats
   day: document.getElementById("day"),
   score: document.getElementById("score"),
-  lives: document.getElementById("lives"),
-  streak: document.getElementById("streak"),
   levelBar: document.getElementById("levelBar"),
   levelPercent: document.getElementById("levelPercent"),
-  livesBar: document.getElementById("livesBar"),
-  livesPercent: document.getElementById("livesPercent"),
   
   // Mobile stats
   mobileDay: document.getElementById("mobileDay"),
   mobileScore: document.getElementById("mobileScore"),
-  mobileLives: document.getElementById("mobileLives"),
   
   // Inputs
   budgetInput: document.getElementById("budgetInput"),
@@ -116,8 +109,6 @@ const el = {
   resetBtn: document.getElementById("resetBtn"),
   
   // Overlay
-  overlay: document.getElementById("overlay"),
-  restartBtn: document.getElementById("restartBtn"),
   modeOverlay: document.getElementById("modeOverlay"),
   chooseDailyMode: document.getElementById("chooseDailyMode"),
   chooseMonthlyMode: document.getElementById("chooseMonthlyMode"),
@@ -146,7 +137,7 @@ if (document.readyState === 'loading') {
 
 function initApp() {
   // Check for critical missing elements
-  const criticalElements = ['day', 'score', 'lives', 'budgetInput', 'spendInput', 'submitSpend'];
+  const criticalElements = ['day', 'score', 'budgetInput', 'spendInput', 'submitSpend'];
   const missing = criticalElements.filter(id => !document.getElementById(id));
   if (missing.length > 0) {
     console.error('Missing critical elements:', missing);
@@ -337,9 +328,6 @@ function setupEventListeners() {
   // Settings
   if (el.settingsSaveBtn) el.settingsSaveBtn.addEventListener("click", saveSettings);
   
-  // Restart
-  if (el.restartBtn) el.restartBtn.addEventListener("click", restartGame);
-  
   // Adjust spending
   if (el.adjustBtn) el.adjustBtn.addEventListener("click", adjustSpending);
   
@@ -478,7 +466,6 @@ function checkMonthlyReset() {
   const currentMonth = new Date().toISOString().slice(0, 7);
   
   if (state.lastLifeReset !== currentMonth) {
-    state.lives = 3;
     state.lastLifeReset = currentMonth;
 
     // Force picking a mode for the new month
@@ -491,7 +478,7 @@ function checkMonthlyReset() {
       month: currentMonth
     };
     
-    toast("✨ New month! Lives and stats reset.");
+    toast("✨ New month! Stats reset.");
     saveState();
     render();
   }
@@ -528,13 +515,6 @@ function calculateStarsFromCost() {
       adjustment = Math.ceil(baseStars * 0.1); // 10% increase
       adjustmentReason = "Need more savings. ";
     }
-  }
-  
-  // Adjust based on streak
-  if (state.streak >= 7) {
-    // Good streak - small reduction
-    adjustment -= Math.floor(baseStars * 0.1);
-    adjustmentReason += "Great streak! ";
   }
   
   // Adjust based on available stars
@@ -770,6 +750,8 @@ async function importData(e) {
     state.pointsPerStar = (Number.isFinite(pps) && pps >= 1) ? Math.round(Math.min(1000, pps)) : defaultState.pointsPerStar;
     if (typeof state.notificationsEnabled !== "boolean") state.notificationsEnabled = defaultState.notificationsEnabled;
     if (typeof state.hapticsEnabled !== "boolean") state.hapticsEnabled = defaultState.hapticsEnabled;
+    delete state.lives;
+    delete state.streak;
     
     saveState();
     render();
@@ -791,25 +773,6 @@ function resetData() {
     toast("🔁 Progress reset.");
     vibrate();
   }
-}
-
-// Restart game
-function restartGame() {
-  el.overlay.classList.add("hidden");
-  state.lives = 3;
-  state.score = 0;
-  state.streak = 0;
-  state.levelXP = 0;
-  state.day = 1;
-  state.history = [];
-  state.wishlist = [];
-  state.availableStars = 0;
-  state.lastLifeReset = new Date().toISOString().slice(0, 7);
-  state.monthlyData = defaultState.monthlyData;
-  saveState();
-  render();
-  toast("🔄 Game restarted!");
-  vibrate();
 }
 
 // Adjust spending
@@ -881,10 +844,6 @@ function adjustTodaysSpending(newSpent) {
   state.score -= oldPoints;
   state.score -= oldBonus;
   
-  if (!oldOverspent) {
-    state.streak = Math.max(0, state.streak - 1);
-  }
-  
   state.levelXP = Math.max(0, state.levelXP - Math.min(20, oldPoints / 2));
   if (oldBonus > 0) {
     state.levelXP = Math.max(0, state.levelXP - 10);
@@ -900,22 +859,10 @@ function adjustTodaysSpending(newSpent) {
     newPoints = Math.round((dayBudget - newSpent) * 2);
     newSaved = dayBudget - newSpent;
     state.score += newPoints;
-    
-    if (!oldOverspent) {
-      state.streak += 1;
-    } else {
-      state.streak = 1;
-    }
-    
     state.levelXP = Math.min(100, state.levelXP + Math.min(20, newPoints / 2));
   } else {
     newOverspent = true;
     newSaved = 0;
-    if (!oldOverspent) {
-      state.lives = Math.max(0, state.lives - 1);
-      state.streak = 0;
-      state.levelXP = Math.max(0, state.levelXP - 10);
-    }
   }
   
   // Handle star changes: we need to "undo" oldStars and "add" newStars
@@ -966,10 +913,6 @@ function adjustTodaysSpending(newSpent) {
   const diff = newSpent - oldSpent;
   const diffText = diff > 0 ? `+${diff}` : diff;
   toast(`✅ Today's spending adjusted from ${oldSpent} to ${newSpent} (${diffText} HKD).`);
-  
-  if (state.lives <= 0) {
-    el.overlay.classList.remove("hidden");
-  }
 }
 
 // Process day
@@ -989,7 +932,6 @@ function processDay(spent) {
   if (spent <= todayBudget) {
     points = Math.round((todayBudget - spent) * 2);
     state.score += points;
-    state.streak += 1;
     state.levelXP = Math.min(100, state.levelXP + Math.min(20, points / 2));
     
     const starsEarned = Math.floor(points / getPointsPerStar());
@@ -1010,10 +952,7 @@ function processDay(spent) {
     }
   } else {
     overspent = true;
-    state.lives = Math.max(0, state.lives - 1);
-    state.streak = 0;
-    state.levelXP = Math.max(0, state.levelXP - 10);
-    message += `⚠️ Overspent! Lost a life. Lives left: ${state.lives}. `;
+    message += `⚠️ Overspent! No points or stars for today. `;
   }
 
   const savedToday = Math.max(0, todayBudget - spent);
@@ -1040,17 +979,11 @@ function processDay(spent) {
   }
 
 
-  // Increase daily budget by 100 every day
-  state.budget = (state.budget || 0) + 100;
   state.day += 1;
 
   saveState();
   el.message.textContent = message.trim();
   render();
-
-  if (state.lives <= 0) {
-    el.overlay.classList.remove("hidden");
-  }
 }
 
 // Wishlist confirmation
@@ -1296,19 +1229,14 @@ function render() {
     // Update main stats
     if (el.day) el.day.textContent = state.day;
     if (el.score) el.score.textContent = state.score;
-    if (el.lives) el.lives.textContent = state.lives;
-    if (el.streak) el.streak.textContent = state.streak;
     
     // Update mobile stats
     if (el.mobileDay) el.mobileDay.textContent = state.day;
     if (el.mobileScore) el.mobileScore.textContent = state.score;
-    if (el.mobileLives) el.mobileLives.textContent = state.lives;
     
     // Update progress bars
     if (el.levelBar) el.levelBar.style.width = `${state.levelXP}%`;
     if (el.levelPercent) el.levelPercent.textContent = `${state.levelXP}%`;
-    if (el.livesBar) el.livesBar.style.width = `${(state.lives / 3) * 100}%`;
-    if (el.livesPercent) el.livesPercent.textContent = `${Math.round((state.lives / 3) * 100)}%`;
     
     // Update stars
     if (el.starsAvailable) el.starsAvailable.textContent = `${state.availableStars} ⭐`;
@@ -1342,15 +1270,6 @@ function render() {
     
     // Update achievements
     const ach = [];
-    if (state.streak >= 3) ach.push(badge("🔥 3-day streak", true));
-    else ach.push(badge("🔥 3-day streak", false));
-    
-    if (state.streak >= 7) ach.push(badge("💪 7-day streak", true));
-    else ach.push(badge("💪 7-day streak", false));
-    
-    if (state.streak >= 14) ach.push(badge("🏆 14-day streak", true));
-    else ach.push(badge("🏆 14-day streak", false));
-    
     if (state.score >= 500) ach.push(badge("💡 Smart choices", true));
     else ach.push(badge("💡 Smart choices", false));
     
@@ -1486,6 +1405,9 @@ function loadState() {
     loaded.pointsPerStar = (Number.isFinite(pps) && pps >= 1) ? Math.round(Math.min(1000, pps)) : defaultState.pointsPerStar;
     if (typeof loaded.notificationsEnabled !== "boolean") loaded.notificationsEnabled = defaultState.notificationsEnabled;
     if (typeof loaded.hapticsEnabled !== "boolean") loaded.hapticsEnabled = defaultState.hapticsEnabled;
+    // Strip removed fields (lives, streak) from old saves
+    delete loaded.lives;
+    delete loaded.streak;
     
     // Ensure monthlyData exists
     if (!loaded.monthlyData) {
